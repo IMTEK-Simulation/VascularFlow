@@ -3,11 +3,12 @@ requires = ["flit_core>=3.2"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "python-skeleton"
-description = "Python skeleton project"
+name = "VacularFlow"
+description = "Reduced-order simulation of flow in vascular networks"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 authors = [
+    { name = "Mahdi Roshani", email = "mahdi.roshani@livmats.uni-freiburg.de" },
     { name = "Lars Pastewka", email = "lars.pastewka@imtek.uni-freiburg.de" }
 ]
 classifiers = [

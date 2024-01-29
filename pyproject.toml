@@ -30,6 +30,11 @@ test = [
     "pytest-flake8"
 ]
 
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
+]
+
 [project.urls]
 documentation = "https://imtek-simulation.github.io/python-skeleton/"
 repository = "https://github.com/imtek-simulation/python-skeleton"

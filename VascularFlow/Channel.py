@@ -1,24 +1,82 @@
 import numpy as np
 
-def flow(flow_rate, radius, length, viscosity):
+
+def flow_rate(position_n, area_rate_of_change_e, input_flow_rate):
+    """
+    Calculates the mass conservation of a fluid in a channel using linear
+    finite elements or (equivalently) first-order finite differences.
+
+    Parameters
+    ----------
+    position_n : np.ndarray
+        The nodal positions along the channel.
+    area_rate_of_change_e : np.ndarray
+        The time-rate of change of the channel cross sectional area
+        within each element along the channel position.
+    input_flow_rate : float
+        The flow rate at the input of the channel.
+
+    Returns
+    -------
+    flow_rate_n : np.ndarray
+        The flow rate at each nodal position along the channel.
+    """
+    element_lengths_e = position_n[1:] - position_n[:-1]
+    return np.append([input_flow_rate],
+                     input_flow_rate + np.cumsum(area_rate_of_change_e * element_lengths_e))
+
+
+def pressure_change(positions_n, area_e, flow_rate, density, kinematic_viscosity, alpha=4 / 3):
     """
     Calculates the pressure drop across a pipe of given radius and length
     for a given flow rate and viscosity.
 
     Parameters
     ----------
+    position_n : np.ndarray
+        The nodal positions along the channel.
+    area_e : np.ndarray
+        The cross-sectional area of the pipe for each element along the pipe.
     flow_rate : float
-        The flow rate of the fluid through the pipe.
-    radius : np.ndarray
-        The radius of the pipe as a function of position along the pipe.
-    length : float
-        The length of the pipe.
-    viscosity : float
-        The viscosity of the fluid.
+        The flow rate.
+    density : float
+        The density of the fluid.
+    kinematic_viscosity : float
+        The kinematic viscosity of the fluid.
+    alpha : float
+        Momentum correction factor. (Default: 4/3)
 
     Returns
     -------
-    pressure_drop : float
-        The pressure drop across the pipe as a function of position along the pipe.
+    pressure_change_n : np.ndarray
+        The pressure change across the pipe for each nodal position along the
+        pipe.
     """
-    pass
+    positions_n = np.asanyarray(positions_n)
+    area_e = np.asanyarray(area_e)
+
+    nb_nodes = len(positions_n)
+
+    # Full stiffness matrix of the flow problem
+    K = np.zeros([nb_nodes, nb_nodes])
+    # Fill the diagonal
+    K[np.arange(nb_nodes)[1:-1], np.arange(nb_nodes)[1:-1]] = (area_e[:-1] - area_e[1:]) / (2 * density)
+    # Fill the off-diagonals - lower
+    K[np.arange(nb_nodes)[1:], np.arange(nb_nodes)[:-1]] = -area_e / (2 * density)
+    # Fill the off-diagonals - upper
+    K[np.arange(nb_nodes)[:-1], np.arange(nb_nodes)[1:]] = area_e / (2 * density)
+    # Set boundary terms
+    K[0] = np.zeros(nb_nodes)
+    K[0, 0] = 1
+    K[-1, -1] = area_e[-1] / (2 * density)
+
+    # right hand side vector
+    f = np.zeros(nb_nodes)
+    dx_e = positions_n[1:] - positions_n[:-1]
+    f[1:-1] = -4 * np.pi * kinematic_viscosity * flow_rate * (dx_e[:-1] / area_e[:-1] + dx_e[1:] / area_e[1:]) + \
+              alpha * flow_rate ** 2 * (1 / area_e[:-1] - 1 / area_e[1:])
+
+    # Set boundary terms
+    f[0] = 0
+    f[-1] = -4 * np.pi * kinematic_viscosity * flow_rate * dx_e[-1] / area_e[-1]
+    return np.linalg.solve(K, f)

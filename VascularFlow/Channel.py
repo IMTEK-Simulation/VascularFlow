@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.sparse
 
 
 def flow_rate(position_n, area_rate_of_change_e, input_flow_rate):
@@ -57,20 +58,25 @@ def pressure_change(positions_n, area_e, flow_rate, density, kinematic_viscosity
 
     nb_nodes = len(positions_n)
 
-    # Full stiffness matrix of the flow problem
-    K = np.zeros([nb_nodes, nb_nodes])
-    # Fill the diagonal
-    K[np.arange(nb_nodes)[1:-1], np.arange(nb_nodes)[1:-1]] = (area_e[:-1] - area_e[1:]) / (2 * density)
-    # Fill the off-diagonals - lower
-    K[np.arange(nb_nodes)[1:], np.arange(nb_nodes)[:-1]] = -area_e / (2 * density)
-    # Fill the off-diagonals - upper
-    K[np.arange(nb_nodes)[:-1], np.arange(nb_nodes)[1:]] = area_e / (2 * density)
-    # Set boundary terms
-    K[0] = np.zeros(nb_nodes)
-    K[0, 0] = 1
-    K[-1, -1] = area_e[-1] / (2 * density)
+    # Diagonal entries of the stiffness matrix
+    diagonal_entries_n = np.ones(nb_nodes)  # First entry needs to be unity (Dirichlet boundary condition)
+    diagonal_entries_n[1:-1] = (area_e[:-1] - area_e[1:]) / (2 * density)
+    diagonal_entries_n[-1] = area_e[-1] / (2 * density)  # Last entry (Neumann boundary condition)
+    # Off-diagonals entries of the stiffness matrix
+    off_diagonal_entries_upper_e = area_e / (2 * density)
+    off_diagonal_entries_lower_e = -area_e / (2 * density)
+    off_diagonal_entries_upper_e[0] = 0  # Dirichlet boundary condition
 
-    # right hand side vector
+    # We need to append 0 here to make the array the same length as diagonal_entries_n
+    off_diagonal_entries_upper_e = np.append(0, off_diagonal_entries_upper_e )
+    off_diagonal_entries_lower_e = np.append(off_diagonal_entries_lower_e, 0)
+    # Construct stiffness matrix
+    K = scipy.sparse.dia_matrix((np.array([off_diagonal_entries_lower_e,
+                                           diagonal_entries_n,
+                                           off_diagonal_entries_upper_e]),
+                                 np.array([-1, 0, 1])), shape=(nb_nodes, nb_nodes))
+
+    # Right hand side vector
     f = np.zeros(nb_nodes)
     dx_e = positions_n[1:] - positions_n[:-1]
     f[1:-1] = -4 * np.pi * kinematic_viscosity * flow_rate * (dx_e[:-1] / area_e[:-1] + dx_e[1:] / area_e[1:]) + \
@@ -79,4 +85,5 @@ def pressure_change(positions_n, area_e, flow_rate, density, kinematic_viscosity
     # Set boundary terms
     f[0] = 0
     f[-1] = -4 * np.pi * kinematic_viscosity * flow_rate * dx_e[-1] / area_e[-1]
-    return np.linalg.solve(K, f)
+
+    return scipy.sparse.linalg.spsolve(K, f)

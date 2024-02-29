@@ -12,7 +12,7 @@ def test_weak_coupling(node_positions_n, plot=True):
 
     flow_rate = 4e-7  # blood flow rate is 3.0~26 ml/min in arteries
 
-    ring_modulus = 1000  # tube wall elasticity coefficient (in Pa)
+    ring_modulus = 21.2e16  # tube wall elasticity coefficient (in Pa)
 
     tube_radius = 1.8e-3  # unstressed tube radius (in m)
     tube_area = np.pi * (tube_radius ** 2)

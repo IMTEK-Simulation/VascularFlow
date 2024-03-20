@@ -1,46 +1,71 @@
 import numpy as np
 import pytest
 
-from VascularFlow.ChannelFlow_Unsteady import area_change
-from VascularFlow.ChannelFlow_Unsteady import flow_rate_change
+from VascularFlow.ChannelFlow_Unsteady import dAdt
+from VascularFlow.ChannelFlow_Unsteady import new_area_e
+from VascularFlow.ChannelFlow_Unsteady import dQdt
+from VascularFlow.ChannelFlow_Unsteady import new_flow_rate_n
 
 
-@pytest.mark.parametrize('node_positions_n', [[0, 0.25, 0.5, 0.75, 1],
-                                              [0, 0.125, 0.5, 0.9, 1]])
-def test_area_change(node_positions_n, plot=False):
+@pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4],
+                                              [0, 0.5, 1.5, 3.5, 4]])
+def test_dAdt(node_positions_n):
+    nb_nodes = len(node_positions_n)
+    flow_rate_init = np.full(nb_nodes, 4e-7)
+    time_changes_area_e = dAdt(node_positions_n, flow_rate_init)
+    print(time_changes_area_e)
+
+
+@pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4],
+                                              [0, 0.5, 1.5, 3.5, 4]])
+def test_new_area_e(node_positions_n, plot=False):
     nb_nodes = len(node_positions_n)
     nb_elements = nb_nodes - 1
-    tube_radius = 1.8e-3  # unstressed tube radius (in m)
+    tube_radius = 1.8e-3
     tube_area = np.pi * (tube_radius ** 2)
-    area_e_init = tube_area * np.ones(nb_elements)  # cross-sectional area of the pipe for each element along the pipe
+    area_e_init = tube_area * np.ones(nb_elements)
+    dt = 0.001
     flow_rate_init = np.full(nb_nodes, 4e-7)
-    dt = 0.0001
-    new_area = area_change(node_positions_n, area_e_init, dt, flow_rate_init)
-    if plot:
-        import matplotlib.pyplot as plt
-        plt.plot(node_positions_n[1:], new_area, 'kx-')
-        plt.xlabel('Position along tube (m)')
-        plt.ylabel('area (m2)')
-        plt.show()
+    area_e_new = new_area_e(area_e_init, dt, node_positions_n, flow_rate_init)
+    print(area_e_new)
 
 
-@pytest.mark.parametrize('node_positions_n', [[0, 0.25, 0.5, 0.75, 1],
-                                              [0, 0.125, 0.5, 0.9, 1]])
-def test_flow_rate_change(node_positions_n, plot=True):
+@pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4],
+                                              [0, 0.5, 1.5, 3.5, 4]])
+def test_dQdt(node_positions_n, plot=False):
     nb_nodes = len(node_positions_n)
     nb_elements = nb_nodes - 1
-    tube_radius = 1.8e-3  # unstressed tube radius (in m)
+    tube_radius = 1.8e-3
     tube_area = np.pi * (tube_radius ** 2)
-    area_e_init = tube_area * np.ones(nb_elements)  # cross-sectional area of the pipe for each element along the pipe
+    area_e_init = tube_area * np.ones(nb_elements)
     flow_rate_init = np.full(nb_nodes, 4e-7)
-    pressure_init = np.full(nb_nodes, 1)
-    dt = 0.0001
-    density = 1
-    kinematic_viscosity = 1
-    new_flow_rate = flow_rate_change(node_positions_n, area_e_init, dt, flow_rate_init, pressure_init, density, kinematic_viscosity)
-    if plot:
-        import matplotlib.pyplot as plt
-        plt.plot(node_positions_n[:], new_flow_rate, 'kx-')
-        plt.xlabel('Position along tube (m)')
-        plt.ylabel('flow rate (m3/s)')
-        plt.show()
+    density = 1050
+    kinematic_viscosity = 3.2e-6
+    ring_modulus = 21.2e3
+    time_changes_flow_rate_n = dQdt(node_positions_n, area_e_init, flow_rate_init, tube_area, density,
+                                    kinematic_viscosity, ring_modulus, alpha=4 / 3)
+    print(time_changes_flow_rate_n)
+
+
+@pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4],
+                                              [0, 0.5, 1.5, 3.5, 4]])
+def test_new_flow_rate_n(node_positions_n, plot=False):
+    nb_nodes = len(node_positions_n)
+    nb_elements = nb_nodes - 1
+    tube_radius = 1.8e-3
+    tube_area = np.pi * (tube_radius ** 2)
+    area_e_init = tube_area * np.ones(nb_elements)
+    dt = 0.001
+    flow_rate_init = np.full(nb_nodes, 4e-7)
+    density = 1050
+    kinematic_viscosity = 3.2e-6
+    ring_modulus = 21.2e3
+    flow_rate_n_new = new_flow_rate_n(node_positions_n, area_e_init, flow_rate_init, tube_area, dt, density,
+                                      kinematic_viscosity, ring_modulus)
+    print(flow_rate_n_new)
+
+
+
+
+
+

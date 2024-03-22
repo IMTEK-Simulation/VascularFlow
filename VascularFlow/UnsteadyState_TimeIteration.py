@@ -38,12 +38,13 @@ def forward_euler_method(positions_n, area_e, A0, flow_rate_n, dt, density,
             The flow rate across the pipe for each nodal position along the pipe.
         """
     t = 0  # The initial value for time to iterate
-    tend = 500 * dt  # The final time
+    tend = 50000 * dt  # The final time
     while t < tend:
         t = t + dt
         area_e_new = new_area_e(area_e, dt, positions_n, flow_rate_n)
         flow_rate_n_new = new_flow_rate_n(positions_n, area_e, flow_rate_n, A0, dt, density,
                                           kinematic_viscosity, ring_modulus)
+        flow_rate_n_new[0] = 4e-7
         area_e = area_e_new
         flow_rate_n = flow_rate_n_new
     return area_e, flow_rate_n

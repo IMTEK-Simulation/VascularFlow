@@ -16,9 +16,24 @@ def dAdt(positions_n, flow_rate_n):
     -------
         the time rate of area changes for each element across the channel.
     """
+    #M1
+    nb_nodes = len(positions_n)
+    nb_elements = nb_nodes -1
     positions_n = np.asanyarray(positions_n)
     element_lengths_e = positions_n[1:] - positions_n[:-1]
-    return (flow_rate_n[:-1] - flow_rate_n[1:]) / (element_lengths_e[:])
+    diagonal_entries_m1 = element_lengths_e
+    off_diagonal_entries_upper_m1 = np.zeros(nb_elements - 1)
+    off_diagonal_entries_lower_m1 = element_lengths_e[:-1]
+    off_diagonal_entries_upper_m1 = np.append(0, off_diagonal_entries_upper_m1)
+    off_diagonal_entries_lower_m1 = np.append(off_diagonal_entries_lower_m1, 0)
+    M1 = scipy.sparse.dia_matrix((np.array([off_diagonal_entries_lower_m1, diagonal_entries_m1,
+                                            off_diagonal_entries_upper_m1]),
+                                  np.array([-1, 0, 1])), shape=(nb_elements, nb_elements))
+    # V1
+    V1 = np.zeros(nb_elements)
+    V1[0] = -flow_rate_n[1]
+    V1[1:] = flow_rate_n[:-2] - flow_rate_n[2:]
+    return scipy.sparse.linalg.spsolve(M1, V1)
 
 
 def new_area_e(area_e, dt, positions_n, flow_rate_n):

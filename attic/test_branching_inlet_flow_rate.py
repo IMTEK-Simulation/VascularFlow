@@ -4,8 +4,8 @@ from matplotlib.animation import FuncAnimation
 from scipy.interpolate import interp1d
 from scipy.optimize import root
 
-from VascularFlow.two_step_Lax_Wendroff_method import lax_wendroff
-from VascularFlow.eigenvalues_computation import compute_lambda
+from VascularFlow.Numerics.two_step_Lax_Wendroff_method import lax_wendroff
+from VascularFlow.Numerics.eigenvalues_computation import compute_lambda
 from VascularFlow.global_characteristic_variables import compute_W
 
 # in this code we want to find the unknowns cross-sectional area (A) and flow rate (Q) in a

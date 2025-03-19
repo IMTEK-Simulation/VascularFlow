@@ -1,6 +1,19 @@
-# Skeleton
+# VascularFlow
 
-Skeleton for numerical projects with Python. This skeleton uses [numpy](https://numpy.org/) and [pytest](https://pytest.org). Rename the `python_skeleton` subdirectory to your module name.
+Simulation of microfluidic flow in deformable vessels.
+
+## Coding conventions
+
+We follow the [PEP 8](https://www.python.org/dev/peps/pep-0008/) coding
+conventions. Use [`black`](https://github.com/psf/black) to format your code.
+
+In particuler:
+* `CamelCase` for classes
+* `snake_case` for functions and variables
+
+For file names we use:
+* `CamelCase.py` for modules
+* `snake_case.py` for scripts and tests
 
 ## Tests
 

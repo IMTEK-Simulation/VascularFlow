@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from VascularFlow.UnsteadyState_TimeIteration import propagate
+from VascularFlow.Numerics.UnsteadyState_TimeIteration import propagate
 
 
 @pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4]])

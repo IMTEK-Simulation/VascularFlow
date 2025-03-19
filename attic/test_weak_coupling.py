@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from VascularFlow.WeakCoupling import solve_weakly_coupled_channel
+from VascularFlow.Numerics.WeakCoupling import solve_weakly_coupled_channel
 
 
 @pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4, 5],

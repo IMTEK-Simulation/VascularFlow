@@ -1,7 +1,7 @@
 import numpy as np
 
-from VascularFlow.ChannelElasticity import independent_rings
-from VascularFlow.ChannelFlow import pressure_change
+from VascularFlow.Elasticity.Tube import independent_rings
+from VascularFlow.Flow.ChannelFlow import pressure_change
 
 
 def solve_weakly_coupled_channel(positions_n, initial_area, ring_modulus, inlet_pressure, flow_rate, density,

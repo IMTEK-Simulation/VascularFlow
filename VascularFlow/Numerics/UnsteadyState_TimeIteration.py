@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from VascularFlow.ChannelFlow_Unsteady import dAdt
-from VascularFlow.ChannelFlow_Unsteady import dQdt
+from VascularFlow.Flow.ChannelFlow_Unsteady import dAdt
+from VascularFlow.Flow.ChannelFlow_Unsteady import dQdt
 
 
 def propagate(time_interval, positions_n, initial_area_e, initial_flow_rate_n, A0, density, kinematic_viscosity,

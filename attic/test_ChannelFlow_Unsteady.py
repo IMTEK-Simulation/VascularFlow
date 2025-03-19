@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from VascularFlow.ChannelFlow_Unsteady import dAdt
-from VascularFlow.ChannelFlow_Unsteady import new_area_e
-from VascularFlow.ChannelFlow_Unsteady import dQdt
-from VascularFlow.ChannelFlow_Unsteady import new_flow_rate_n
+from VascularFlow.Flow.ChannelFlow_Unsteady import dAdt
+from VascularFlow.Flow.ChannelFlow_Unsteady import new_area_e
+from VascularFlow.Flow.ChannelFlow_Unsteady import dQdt
+from VascularFlow.Flow.ChannelFlow_Unsteady import new_flow_rate_n
 
 
 @pytest.mark.parametrize('node_positions_n', [[0, 1, 2, 3, 4],

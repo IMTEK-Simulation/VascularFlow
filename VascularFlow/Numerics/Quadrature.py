@@ -47,11 +47,25 @@ _quadrature_weights = {
 }
 
 
-def gaussian_quadrature(nb_quad_pts, func):
+def gaussian_quadrature1(nb_quad_pts: int, func: callable) -> float:
     """
     Compute the integral of a function using Gaussian quadrature
     over the interval [-1, 1]
     """
     points = _quadrature_points[nb_quad_pts]
     weights = _quadrature_weights[nb_quad_pts]
-    return np.sum(weights * func(points))
+    return np.sum(weights * func(points), axis=-1)
+
+
+def gaussian_quadrature(nb_quad_pts: int, a: float, b: float, func: callable) -> float:
+    """
+    Compute the integral of a function using Gaussian quadrature
+    over the interval [a, b]
+    """
+    return (
+        0.5
+        * (b - a)
+        * gaussian_quadrature1(
+            nb_quad_pts, lambda x: func(0.5 * (b - a) * x + 0.5 * (b + a))
+        )
+    )

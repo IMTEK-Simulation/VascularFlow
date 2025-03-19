@@ -23,5 +23,5 @@ def first_first(nb_quad_pts: int, basis_function: BasisFunction):
 
 def second_second(nb_quad_pts: int, basis_function: BasisFunction):
     return element_matrix(
-        nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
+        nb_quad_pts, basis_function.second_derivative, basis_function.second_derivative
     )

@@ -1,31 +1,37 @@
 import numpy as np
 
+from VascularFlow.Numerics.Assembly import assemble_system_matrix
+from VascularFlow.Numerics.BasisFunctions import QuadraticBasis
+from VascularFlow.Numerics.ElementMatrices import second_second
 
 
-def euler_bernoulli(x_n, p_n):
+def euler_bernoulli(x_n, q_g):
     """
     Calculates the deflection of a beam under the Euler-Bernoulli beam theory.
 
     Parameters
     ----------
     x_n : np.ndarray
-        The nodal positions along the beam.
-    p_n : np.ndarray
-        The pressure across the beam for each nodal position along the beam.
+        The positions of the element boundary along the beam.
+    q_g : np.ndarray
+        The line-load across the beam for each nodal position along the beam.
+        (The line-load is normalized by EI)
 
     Returns
     -------
     deflection_n : np.ndarray
         The deflection of the beam for each nodal position along the beam.
     """
-    x_n = np.asanyarray(x_n)
-    p_n = np.asanyarray(p_n)
+    element_matrix_nn = second_second(1, QuadraticBasis())
+    nb_nodes, _ = element_matrix_nn.shape
 
-    nb_nodes = len(x_n)
-    element_lengths_e = x_n[1:] - x_n[:-1]
-    element_centers_e = (x_n[1:] + x_n[:-1]) / 2
+    dx_e = x_n[1:] - x_n[:-1]  # Width of each element
+    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * (
+        dx_e ** (-3)
+    ).reshape(-1, 1, 1)
 
-    deflection_n = np.zeros(nb_nodes)
-    for i in range(1, nb_nodes):
-        deflection_n[i] = deflection_n[i-1] + (p_n[i-1] * element_lengths_e[i-1]**3) / 3
-    return deflection_n
+    system_matrix_gg = assemble_system_matrix(element_matrices_enn)
+
+    w_g = np.linalg.solve(system_matrix_gg, q_g)
+
+    return w_g

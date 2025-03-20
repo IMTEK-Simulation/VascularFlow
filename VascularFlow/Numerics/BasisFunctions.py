@@ -37,12 +37,12 @@ class QuadraticBasis(BasisFunction):
     _nb_nodes = 3
 
     def eval(self, x: np.array) -> np.ndarray:
-        return np.array([1 - 3 * x + 2 * x**2, 4 * x - 4 * x**2, -x + x**2])
+        return np.array([1 - 3 * x + 2 * x**2, 4 * x - 4 * x**2, -x + 2 * x**2])
 
     def first_derivative(self, x: np.array) -> np.ndarray:
-        return np.array([-3 + 4 * x, 4 - 8 * x, -1 + 2 * x])
+        return np.array([-3 + 4 * x, 4 - 8 * x, -1 + 4 * x])
 
     def second_derivative(self, x: np.array) -> np.ndarray:
         return np.array(
-            [4 * np.ones_like(x), -8 * np.ones_like(x), 2 * np.ones_like(x)]
+            [4 * np.ones_like(x), -8 * np.ones_like(x), 4 * np.ones_like(x)]
         )

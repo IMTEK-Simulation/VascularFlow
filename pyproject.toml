@@ -19,7 +19,8 @@ requires-python = ">=3.8.0"
 dynamic = [ "version" ]
 dependencies = [
     "numpy",
-    "scipy"
+    "scipy",
+    "matplotlib"
 ]
 
 [project.optional-dependencies]

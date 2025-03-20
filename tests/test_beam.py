@@ -16,7 +16,7 @@ def test_euler_bernoulli_constant_load(plot=True):
         import matplotlib.pyplot as plt
         x = np.linspace(left, right, 101)
         plt.plot(x_g, w_g, 'kx')
-        # plt.plot(x, w_g.dot(QuadraticBasis().eval(x_g)))
+        plt.plot(x, QuadraticBasis().interpolate(x_n, w_g, x), 'k-')
         plt.xlabel('x')
         plt.ylabel('w')
         plt.show()

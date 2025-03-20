@@ -23,11 +23,11 @@ def euler_bernoulli(x_n, q_g):
         The deflection of the beam for each nodal position along the beam.
     """
     element_matrix_nn = second_second(1, QuadraticBasis())
-    nb_nodes, _ = element_matrix_nn.shape
+    n, _ = element_matrix_nn.shape
 
     # Compute element matrices
     dx_e = x_n[1:] - x_n[:-1]  # Width of each element
-    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * (
+    element_matrices_enn = element_matrix_nn.reshape((1, n, n)) * (
         dx_e ** (-3)
     ).reshape(-1, 1, 1)
 
@@ -53,9 +53,6 @@ def euler_bernoulli(x_n, q_g):
     system_matrix_gg[-2, -2] = 4
     system_matrix_gg[-2, -3] = -1
     q_g[-2] = 0
-
-    np.set_printoptions(precision=2, suppress=True)
-    print(system_matrix_gg)
 
     # Solve system
     w_g = np.linalg.solve(system_matrix_gg, q_g)

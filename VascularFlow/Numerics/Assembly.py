@@ -1,3 +1,4 @@
+import numpy as np
 from numpy import ndarray
 
 
@@ -8,7 +9,7 @@ def assemble_system_matrix(element_matrices_enn: ndarray):
 
     nb_global_nodes = (nb_nodes - 1) * nb_elements + 1
 
-    system_matrix_gg = ndarray((nb_global_nodes, nb_global_nodes))
+    system_matrix_gg = np.zeros((nb_global_nodes, nb_global_nodes))
 
     for e in range(nb_elements):
         system_matrix_gg[

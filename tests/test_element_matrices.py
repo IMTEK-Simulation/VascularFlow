@@ -17,4 +17,6 @@ def test_second_second():
     element_matrix = second_second(1, basis_function)
 
     # This is the Laplace matrix for linear elements
-    np.testing.assert_allclose(element_matrix, [[1, -1, 0], [-1, 1, 0], [0, 0, 0]])
+    np.testing.assert_allclose(
+        element_matrix, [[16, -32, 8], [-32, 64, -16], [8, -16, 4]]
+    )

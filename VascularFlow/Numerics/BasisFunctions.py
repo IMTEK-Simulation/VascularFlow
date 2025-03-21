@@ -35,7 +35,7 @@ class BasisFunction:
             w_nk += [w_g[n * element_k + i]]
         w_nk = np.array(w_nk)
         x_k = (y_k - y_n[element_k]) / (y_n[element_k + 1] - y_n[element_k])
-        return np.sum(w_nk*self.eval(x_k), axis=0)
+        return np.sum(w_nk * self.eval(x_k), axis=0)
 
 
 class LinearBasis(BasisFunction):
@@ -61,3 +61,19 @@ class QuadraticBasis(BasisFunction):
         return np.array(
             [4 * np.ones_like(x), -8 * np.ones_like(x), 4 * np.ones_like(x)]
         )
+
+
+class CubicBasis(BasisFunction):
+    _nb_nodes = 4
+
+    def eval(self, x: np.array) -> np.ndarray:
+        return np.array([1 - 3 * x ** 2 + 2 * x ** 3, x - 2 * x ** 2 + x ** 3,
+                         3 * x ** 2 - 2 * x ** 3, -x ** 2 + x ** 3])
+
+    def first_derivative(self, x: np.array) -> np.ndarray:
+        return np.array(
+            [-6 * x + 6 * x ** 2, 1 - 4 * x + 3 * x ** 2, 6 * x - 6 * x ** 2,
+             -2 * x + 3 * x ** 2])
+
+    def second_derivative(self, x: np.array) -> np.ndarray:
+        return np.array([-6 + 12 * x, -4 + 6 * x, 6 - 12 * x, -2 + 6 * x])

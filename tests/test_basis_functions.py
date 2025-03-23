@@ -1,10 +1,22 @@
 import numpy as np
 import pytest
 
-from VascularFlow.Numerics.BasisFunctions import LinearBasis, QuadraticBasis
+from VascularFlow.Numerics.BasisFunctions import LinearBasis, QuadraticBasis, \
+    HermiteBasis, CubicBasis
 
 
-@pytest.mark.parametrize('basis_function_class', [LinearBasis, QuadraticBasis])
+@pytest.mark.skip
+def test_plot_basis_function(basis_function=HermiteBasis()):
+    import matplotlib.pyplot as plt
+    x = np.linspace(0, 1, 101)
+    vs = basis_function.eval(x)
+    for v in vs:
+        plt.plot(x, v, '-')
+    plt.show()
+
+
+@pytest.mark.parametrize('basis_function_class',
+                         [LinearBasis, QuadraticBasis, CubicBasis, HermiteBasis])
 def test_first_derivative(basis_function_class, delta=1e-6, rtol=1e-6):
     basis_function = basis_function_class()
     x_i = np.array([0.1, 0.3, 0.7, 0.9])
@@ -20,7 +32,8 @@ def test_first_derivative(basis_function_class, delta=1e-6, rtol=1e-6):
     np.testing.assert_allclose(d_ni, d_fd_ni, rtol=rtol)
 
 
-@pytest.mark.parametrize('basis_function_class', [QuadraticBasis])
+@pytest.mark.parametrize('basis_function_class',
+                         [QuadraticBasis, CubicBasis, HermiteBasis])
 def test_second_derivative(basis_function_class, delta=1e-6, rtol=1e-6):
     basis_function = basis_function_class()
     x_i = np.array([0.1, 0.3, 0.7, 0.9])

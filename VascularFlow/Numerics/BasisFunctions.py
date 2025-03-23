@@ -77,3 +77,18 @@ class CubicBasis(BasisFunction):
 
     def second_derivative(self, x: np.array) -> np.ndarray:
         return np.array([-6 + 12 * x, -4 + 6 * x, 6 - 12 * x, -2 + 6 * x])
+
+
+class HermiteBasis(BasisFunction):
+    _nb_nodes = 4
+
+    def eval(self, x: np.array) -> np.ndarray:
+        return np.array([(1 - x) ** 2 * (1 + 2 * x), (1 - x) ** 2 * x,
+                         x ** 2 * (3 - 2 * x), (x - 1) * x ** 2])
+
+    def first_derivative(self, x: np.array) -> np.ndarray:
+        return np.array(
+            [6 * x * (x - 1), 1 - 4 * x + 3 * x ** 2, 6 * x * (1 - x), x * (3 * x - 2)])
+
+    def second_derivative(self, x: np.array) -> np.ndarray:
+        return np.array([12 * x - 6, 6 * x - 4, 6 - 12 * x, 6 * x - 2])

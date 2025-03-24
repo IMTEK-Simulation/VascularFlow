@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.sparse import diags
 
 from VascularFlow.Numerics.BasisFunctions import BasisFunction
 from VascularFlow.Numerics.Quadrature import gaussian_quadrature
@@ -14,6 +15,22 @@ def element_matrix(nb_quad_pts: int, f: callable, g: callable):
 
     return gaussian_quadrature(nb_quad_pts, 0, 1, outer_product)
 
+def dx_matrix(dx: float):
+    diagonal = np.array([1/dx**3, 1/dx, 1/dx**3, 1/dx])
+    off_diagonal = np.array([1 / dx ** 3, 1 / dx])
+    return diags(
+        [1/dx**2, off_diagonal, 1/dx**2, diagonal, 1/dx**2, off_diagonal, 1/dx**2],
+        [-3, -2, -1, 0, 1, 2, 3], shape=(4, 4)
+    ).toarray()
+
+def dx_matrix_mass(dx):
+    return [
+        [dx,    dx**2, dx,    dx**2],
+        [dx**2, dx**3, dx**2, dx**3],
+        [dx,    dx**2, dx,    dx**2],
+        [dx**2, dx**3, dx**2, dx**3],
+    ]
+
 
 def first_first(nb_quad_pts: int, basis_function: BasisFunction):
     return element_matrix(
@@ -21,7 +38,16 @@ def first_first(nb_quad_pts: int, basis_function: BasisFunction):
     )
 
 
-def second_second(nb_quad_pts: int, basis_function: BasisFunction):
+def second_second(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
     return element_matrix(
         nb_quad_pts, basis_function.second_derivative, basis_function.second_derivative
-    )
+    ) * dx_matrix(dx)
+
+def force_matrix(dx: int):
+    return np.array([dx/2, dx**2/12, dx/2, -dx**2/12])
+
+
+def mass_matrix(nb_quad_pts: int, dx:int, basis_function: BasisFunction):
+    return element_matrix(
+        nb_quad_pts, basis_function.eval, basis_function.eval
+    ) * dx_matrix_mass(dx)

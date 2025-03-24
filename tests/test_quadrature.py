@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from VascularFlow.Numerics.BasisFunctions import HermiteBasis
 from VascularFlow.Numerics.Quadrature import gaussian_quadrature1, gaussian_quadrature
 
 _functions = [
@@ -27,3 +28,19 @@ def test_gaussian_quadrature():
         return x + x**3
 
     np.testing.assert_allclose(gaussian_quadrature(2, 1, 3, f), 24.0)
+
+
+@pytest.mark.parametrize("nb_quad_pts", [3])  # Different quadrature points
+def test_integral_first_hermite_basis(nb_quad_pts):
+    basis_function = HermiteBasis()  # Create instance
+    func = lambda x: basis_function.eval(x)[3]  # First element of eval(x)
+
+    integral_value = gaussian_quadrature(nb_quad_pts, 0, 1, func)  # Integrate over [0,1]
+
+    expected_value = -0.08  # Expected integral (analytically computed for reference)
+
+    assert np.isclose(integral_value, expected_value, atol=1e-2), \
+        f"Integral value is {integral_value}, expected {expected_value}"
+
+    print(f"Integral of first HermiteBasis function over [0,1] ≈ {integral_value}")
+

@@ -92,14 +92,14 @@ def euler_bernoulli_transient(x_n, dx_e, num_steps, dt):
     f = assemble_force_matrix_2dof(assemble_load_vector)
 
 
-    w_n = np.zeros(2 * len(x_n))
-    w_n1 = np.zeros(2 * len(x_n))
+    #w_n = np.zeros(2 * len(x_n))
+    #w_n1 = np.zeros(2 * len(x_n))
 
-    r1 = 2 * (m @ w_n)
-    r2 = m @ w_n1
-    r3 = (dt**2) * f
+    #r1 = 2 * (m @ w_n)
+    #r2 = m @ w_n1
+    #r3 = (dt**2) * f
 
-    q = r1 - r2 + r3
+    #q = r1 - r2 + r3
 
     a[0] = 0
     a[0, 0] = 1
@@ -110,15 +110,27 @@ def euler_bernoulli_transient(x_n, dx_e, num_steps, dt):
     a[-2] = 0
     a[-2, -2] = 1
 
-    q[0] = 0
-    q[1] = 0
-    q[-1] = 0
-    q[-2] = 0
-
+    #q[0] = 0
+    #q[1] = 0
+    #q[-1] = 0
+    #q[-2] = 0
+    w_n = np.zeros(2 * len(x_n))
+    w_n1 = np.zeros(2 * len(x_n))
     for n in range(num_steps):
+
+        r1 = 2 * (m @ w_n)
+        r2 = m @ w_n1
+        r3 = (dt**2) * f
+        q = r1 - r2 + r3
+        q[0] = 0
+        q[1] = 0
+        q[-1] = 0
+        q[-2] = 0
         w_g = np.linalg.solve(a, q)
+
         w_n1 = w_n
         w_n = w_g
+
 
 
 

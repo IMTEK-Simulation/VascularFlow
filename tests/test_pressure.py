@@ -10,8 +10,12 @@ def test_pressure(plot=True):
     eps = 0.02
     re = 7.5
     st = 0.68
+    Hstar = np.ones(len(x_n))
+    Qstar = np.ones(len(x_n))
+    Q_n = np.ones(len(x_n))
+    Q_n1 = np.ones(len(x_n))
 
-    pp = pressure(x_n, dx_e, dt, eps, re, st)[2]
+    pp = pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1)[2]
     print(pp.shape)
     print(pp)
     if plot:

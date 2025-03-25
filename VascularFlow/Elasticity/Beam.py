@@ -56,7 +56,7 @@ def euler_bernoulli(x_n, dx_e , p):
     return system_matrix_gg, system_matrix_ll, w_g
 
 
-def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p):
+def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_new):
     element_matrix_stiffness = second_second(3, dx_e, HermiteBasis())
     nb_nodes, _ = element_matrix_stiffness.shape
     nb_elements = len(x_n) - 1
@@ -103,10 +103,11 @@ def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p):
         w_n1 = w_n
         w_n = w_g
 
+    H_g = 1 + (beta * w_g)
+    H_g = relaxation * H_g + (1 - relaxation) * H_new
 
 
-
-    return w_g
+    return w_g, H_g
 
 
 

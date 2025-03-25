@@ -15,7 +15,7 @@ def test_pressure(plot=True):
     Q_n = np.ones(len(x_n))
     Q_n1 = np.ones(len(x_n))
 
-    pp = pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1)[2]
+    pp = pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1)
     print(pp.shape)
     print(pp)
     if plot:

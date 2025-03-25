@@ -28,4 +28,4 @@ def pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1):
 
     p = np.linalg.solve(system_matrix_gg, system_matrix_ll)
 
-    return system_matrix_gg, system_matrix_ll , p
+    return p

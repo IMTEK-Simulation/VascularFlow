@@ -37,6 +37,11 @@ def first_first(nb_quad_pts: int, basis_function: BasisFunction):
         nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
     )
 
+def eval_first(nb_quad_pts: int, basis_function: BasisFunction):
+    return element_matrix(
+        nb_quad_pts, basis_function.eval, basis_function.first_derivative
+    )
+
 
 def second_second(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
     return element_matrix(
@@ -45,6 +50,10 @@ def second_second(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
 
 def force_matrix(dx: int):
     return np.array([dx/2, dx**2/12, dx/2, -dx**2/12])
+
+
+def force_matrix_pressure(dx: int):
+    return np.array([dx/2, dx/2])
 
 
 def mass_matrix(nb_quad_pts: int, dx:int, basis_function: BasisFunction):

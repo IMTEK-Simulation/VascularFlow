@@ -1,13 +1,20 @@
 import numpy as np
 
 from VascularFlow.Numerics.BasisFunctions import LinearBasis, QuadraticBasis, HermiteBasis
-from VascularFlow.Numerics.ElementMatrices import first_first, second_second, force_matrix, mass_matrix, dx_matrix_mass
+from VascularFlow.Numerics.ElementMatrices import first_first, eval_first, second_second, force_matrix, force_matrix_pressure, mass_matrix, dx_matrix_mass
 
 def test_first_first():
     basis_function = LinearBasis()
     element_matrix = first_first(1, basis_function)
     # This is the Laplace matrix for linear elements
     np.testing.assert_allclose(element_matrix, [[1, -1], [-1, 1]])
+
+
+def test_first_eval():
+    basis_function = LinearBasis()
+    element_matrix = eval_first(1, basis_function)
+    print(element_matrix.shape)
+    print(element_matrix)
 
 
 def test_second_second():
@@ -20,6 +27,12 @@ def test_second_second():
 def test_force_matrix():
     dx = 1
     print(force_matrix(dx))
+
+
+def test_force_matrix_pressure():
+    dx = 1
+    print(force_matrix_pressure(dx))
+
 
 def test_dx_matrix_mass():
     dx = 1

@@ -48,3 +48,16 @@ def assemble_force_matrix_2dof(element_matrices_enn: ndarray):
         end = start + nb_nodes
         system_matrix_gg[start:end] += element_matrices_enn[e].reshape(4,)
     return system_matrix_gg
+
+
+def assemble_force_matrix_pressure(element_matrices_enn: ndarray):
+    """Assemble the system matrix from the element matrices."""
+    nb_elements, _, nb_nodes = element_matrices_enn.shape
+    nb_global_nodes = nb_elements + 1
+    system_matrix_gg = np.zeros(nb_global_nodes)
+
+    for e in range(nb_elements):
+        start = e * (nb_nodes - 1)
+        end = start + nb_nodes
+        system_matrix_gg[start:end] += element_matrices_enn[e].reshape(2,)
+    return system_matrix_gg

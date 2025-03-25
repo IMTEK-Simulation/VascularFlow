@@ -1,8 +1,8 @@
 import numpy as np
 
-from VascularFlow.Numerics.Assembly import assemble_system_matrix_1dof, assemble_system_matrix_2dof, assemble_force_matrix_2dof
+from VascularFlow.Numerics.Assembly import assemble_system_matrix_1dof, assemble_system_matrix_2dof, assemble_force_matrix_2dof, assemble_force_matrix_pressure
 from VascularFlow.Numerics.BasisFunctions import LinearBasis, HermiteBasis
-from VascularFlow.Numerics.ElementMatrices import first_first, second_second, force_matrix, mass_matrix
+from VascularFlow.Numerics.ElementMatrices import first_first, eval_first, second_second, force_matrix, mass_matrix, force_matrix_pressure
 
 
 def test_assemble_2x2():
@@ -23,6 +23,19 @@ def test_assemble_2x2():
         [[1, -1, 0, 0], [-1, 2, -1, 0], [0, -1, 2, -1], [0, 0, -1, 1]],
         atol=1e-6,
     )
+
+
+def test_assemble_2x2_eval_first():
+    element_matrices_nn = eval_first(1, LinearBasis())
+
+    element_matrices_enn = element_matrices_nn.reshape((1, 2, 2)) * np.ones(3).reshape(
+        (3, 1, 1)
+    )
+
+    system_matrix_gg = assemble_system_matrix_1dof(element_matrices_enn)
+    print(system_matrix_gg.shape)
+    print(system_matrix_gg)
+
 
 
 def test_assemble_3x3():
@@ -71,6 +84,14 @@ def test_assemble_force_matrix():
     element_matrices_enn = element_matrices_nn.reshape((1, 1, 4)) * np.ones(3).reshape(3, 1, 1)
     system_matrix_gg = assemble_force_matrix_2dof(element_matrices_enn)
     print(system_matrix_gg)
+
+
+def test_assemble_force_matrix_pressure():
+    element_matrices_nn = force_matrix_pressure(1)
+    element_matrices_nn = element_matrices_nn.reshape((1, 1, 2)) * np.ones(3).reshape(3, 1, 1)
+    system_matrix_gg = assemble_force_matrix_pressure(element_matrices_nn)
+    print(system_matrix_gg)
+
 
 
 

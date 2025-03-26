@@ -42,17 +42,17 @@ def test_euler_bernoulli_constant_load_transient(plot=True):
     dt = 2.5e-03
     num_steps = 1
     p = (-12 * x_n + 12)
-    p_interleaved = np.zeros(len(p) * 2)
-    p_interleaved[::2] = p
+    #p_interleaved = np.zeros(len(p) * 2)
+    #p_interleaved[::2] = p
     beta = 35156.24
     relaxation = 0.00003
-    H_new = np.ones(len(x_n) * 2)
+    H_new = np.ones(len(x_n))
 
-    channel_height = euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p_interleaved, beta, relaxation, H_new)[1]
+    channel_height = euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_new)
 
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(x_n, channel_height[::2])
+        plt.plot(x_n, channel_height)
         plt.xlabel('x')
         plt.ylabel('displacement')
         plt.show()

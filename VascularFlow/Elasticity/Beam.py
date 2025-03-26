@@ -1,11 +1,18 @@
 import numpy as np
 
-from VascularFlow.Numerics.Assembly import assemble_system_matrix_2dof, assemble_force_matrix_2dof
+from VascularFlow.Numerics.Assembly import (
+    assemble_system_matrix_2dof,
+    assemble_force_matrix_2dof,
+)
 from VascularFlow.Numerics.BasisFunctions import HermiteBasis
-from VascularFlow.Numerics.ElementMatrices import second_second, force_matrix, mass_matrix
+from VascularFlow.Numerics.ElementMatrices import (
+    second_second,
+    force_matrix,
+    mass_matrix,
+)
 
 
-def euler_bernoulli(x_n, dx_e , p):
+def euler_bernoulli(x_n, dx_e, p):
     """
     Calculates the deflection of a beam under the Euler-Bernoulli beam theory.
 
@@ -27,7 +34,9 @@ def euler_bernoulli(x_n, dx_e , p):
     element_matrix_nn = second_second(3, dx_e, HermiteBasis())
     nb_nodes, _ = element_matrix_nn.shape
     nb_elements = len(x_n) - 1
-    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
+    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * np.ones(
+        nb_elements
+    ).reshape(nb_elements, 1, 1)
     system_matrix_gg = assemble_system_matrix_2dof(element_matrices_enn)
 
     rhs1 = force_matrix(dx_e)
@@ -60,22 +69,27 @@ def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_n
     element_matrix_stiffness = second_second(3, dx_e, HermiteBasis())
     nb_nodes, _ = element_matrix_stiffness.shape
     nb_elements = len(x_n) - 1
-    assemble_matrix_stiffness = element_matrix_stiffness.reshape((1, nb_nodes, nb_nodes)) * np.ones(nb_elements).reshape(
-        nb_elements, 1, 1)
+    assemble_matrix_stiffness = element_matrix_stiffness.reshape(
+        (1, nb_nodes, nb_nodes)
+    ) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
     k = assemble_system_matrix_2dof(assemble_matrix_stiffness)
-
 
     element_matrix_mass = mass_matrix(3, dx_e, HermiteBasis())
     nb_nodes, _ = element_matrix_mass.shape
-    assemble_matrix_mass = element_matrix_mass.reshape((1, nb_nodes, nb_nodes)) * np.ones(nb_elements).reshape(
-        nb_elements, 1, 1)
+    assemble_matrix_mass = element_matrix_mass.reshape(
+        (1, nb_nodes, nb_nodes)
+    ) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
     m = assemble_system_matrix_2dof(assemble_matrix_mass)
 
-    a = (m + (dt**2) * k)
+    a = m + (dt**2) * k
 
     element_load_vector = force_matrix(dx_e)
-    assemble_load_vector = element_load_vector.reshape((1, 1, 4)) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
-    f = assemble_force_matrix_2dof(assemble_load_vector) * p
+    assemble_load_vector = element_load_vector.reshape((1, 1, 4)) * np.ones(
+        nb_elements
+    ).reshape(nb_elements, 1, 1)
+    p_interleaved = np.zeros(len(p) * 2)
+    p_interleaved[::2] = p
+    f = assemble_force_matrix_2dof(assemble_load_vector) * p_interleaved
 
     a[0] = 0
     a[0, 0] = 1
@@ -103,12 +117,9 @@ def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_n
         w_n1 = w_n
         w_n = w_g
 
+    H_new_interleaved = np.zeros(len(H_new) * 2)
+    H_new_interleaved[::2] = H_new
     H_g = 1 + (beta * w_g)
-    H_g = relaxation * H_g + (1 - relaxation) * H_new
+    H_g = relaxation * H_g + (1 - relaxation) * H_new_interleaved
 
-
-    return w_g, H_g
-
-
-
-
+    return H_g[::2]

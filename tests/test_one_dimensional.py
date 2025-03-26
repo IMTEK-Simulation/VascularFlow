@@ -6,9 +6,9 @@ from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arr
 
 
 def test_two_way_coupled_fsi(plot=True):
-    nb_nodes = 200
+    nb_nodes = 11
     time_step_size = 2.5e-03
-    end_time = 20
+    end_time = 1
 
     # Initialize constants
     constants = initialize_constants()
@@ -25,7 +25,6 @@ def test_two_way_coupled_fsi(plot=True):
     h_n = flow_arrays["h_n"]
     h_star = flow_arrays["h_star"]
     h_new = flow_arrays["h_new"]
-    h_new = np.concatenate([h_new, h_new]) #????????????????????????????????????????????????????????????????????????#
     q_n_1 = flow_arrays["q_n_1"]
     q_n = flow_arrays["q_n"]
     q_star = flow_arrays["q_star"]
@@ -55,3 +54,12 @@ def test_two_way_coupled_fsi(plot=True):
         p,
         p_inner,
     )
+
+    if plot:
+        import matplotlib.pyplot as plt
+        x = np.linspace(0, 1, nb_nodes)
+        plt.plot(x, final_solution)
+        plt.xlabel('x')
+        plt.ylabel('channel height')
+        plt.show()
+

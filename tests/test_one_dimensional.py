@@ -8,7 +8,7 @@ from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arr
 def test_two_way_coupled_fsi(plot=True):
     nb_nodes = 11
     time_step_size = 2.5e-03
-    end_time = 1
+    end_time = 2 * 2.5e-03
 
     # Initialize constants
     constants = initialize_constants()
@@ -57,9 +57,12 @@ def test_two_way_coupled_fsi(plot=True):
 
     if plot:
         import matplotlib.pyplot as plt
-        x = np.linspace(0, 1, nb_nodes)
-        plt.plot(x, final_solution)
-        plt.xlabel('x')
-        plt.ylabel('channel height')
+        plt.figure(figsize=(10, 5))
+        plt.semilogy(final_solution[2], final_solution[1])
+        plt.xlabel("Cumulative Inner Iteration Count")
+        plt.ylabel("Inner Residual (log scale)")
+        plt.title("Inner Residual vs Iterations")
+        plt.grid(True)
+        plt.tight_layout()
         plt.show()
 

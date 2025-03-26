@@ -4,6 +4,7 @@ from VascularFlow.Elasticity.Beam import euler_bernoulli_transient
 from VascularFlow.Flow.Flow import flow_rate
 from VascularFlow.Flow.Pressure import pressure
 
+
 def two_way_coupled_fsi(
     nb_nodes: int,
     time_step_size: float,
@@ -30,13 +31,16 @@ def two_way_coupled_fsi(
 
     time = 0
     outer_iteration_number = 0
+
+    residual_values = []
+    iteration_indices = []
+    global_inner_counter = 0
     while time < end_time:
         time += time_step_size
         outer_iteration_number += 1
-        ###############################################################################################################
         inner_iteration_number = 0
         inner_residual = 1
-        while inner_residual > 10e-06 and inner_iteration_number<20000:
+        while inner_residual > 10e-04 and inner_iteration_number < 100:
             # pressure calculation
             p = pressure(
                 x_n,
@@ -63,7 +67,7 @@ def two_way_coupled_fsi(
                 h_new,
             )
 
-            #flow rate calculation
+            # flow rate calculation
             q_star = flow_rate(
                 x_n,
                 element_length,
@@ -76,38 +80,22 @@ def two_way_coupled_fsi(
             )
 
             # update inner iteration
-            if max(abs(h_new - 1)) < 1e-8:
-                inner_residual1 = max(abs(h_star - h_new)) / (max(abs(h_new)) + 1e-8)
-            else:
-                inner_residual1 = max(abs(h_star - h_new)) / max(abs(h_new))
-
-            if max(abs(p_inner)) < 1e-8:
-                inner_residual2 = max(abs(p - p_inner)) / (max(abs(p_inner)) + 1e-8)
-            else:
-                inner_residual2 = max(abs(p - p_inner)) / max(abs(p_inner))
+            inner_residual1 = max(abs(h_star - h_new)) / max(abs(h_new))
+            inner_residual2 = max(abs(p - p_inner)) / max(abs(p_inner))
 
             inner_residual = max(inner_residual1, inner_residual2)
+
+            residual_values.append(inner_residual)
+            iteration_indices.append(global_inner_counter)
+            global_inner_counter += 1
 
             p_inner = p
             h_new = h_star
             inner_iteration_number += 1
-
-        # residuals
-        res1 = np.linalg.norm(abs(h_new - h_n)) / np.sqrt(np.size(h_new))
-        res2 = np.max(abs(h_new - h_n))
-        #print(time, res1, res2)
-
 
         h_n_1 = h_n
         h_n = h_new
         q_n_1 = q_n
         q_n = q_new
 
-    return h_n
-
-
-
-
-
-
-
+    return h_n, residual_values, iteration_indices

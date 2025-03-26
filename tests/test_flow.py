@@ -10,6 +10,7 @@ from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arr
 def test_flow(plot=True):
     left = 0
     right = 1
+    nb_nodes = 101
     x_n = np.linspace(left, right, 101)
     dx_e = (right - left) / (len(x_n) - 1)
     dt = 2.5e-3
@@ -24,7 +25,7 @@ def test_flow(plot=True):
     inlet_flow_rate = constants["q0"]
 
     # Initialize flow arrays
-    flow_arrays = initialize_flow_arrays(x_n)
+    flow_arrays = initialize_flow_arrays(nb_nodes)
     h_star = flow_arrays["h_star"]
     q_star = flow_arrays["q_star"]
     q_n = flow_arrays["q_n"]
@@ -42,13 +43,13 @@ def test_flow(plot=True):
         q_star,
         q_n,
         q_n1,
-    )[2]
-    pp_interleaved = np.zeros(len(pp) * 2)
-    pp_interleaved[::2] = pp
+    )
+    # pp_interleaved = np.zeros(len(pp) * 2)
+    # pp_interleaved[::2] = pp
 
     # Initialize flow arrays
     h_new = flow_arrays["h_new"]
-    h_new = np.concatenate([h_new, h_new])
+    # h_new = np.concatenate([h_new, h_new])
 
     # channel height calculation
     channel_height = euler_bernoulli_transient(
@@ -56,11 +57,11 @@ def test_flow(plot=True):
         dx_e,
         num_steps,
         dt,
-        pp_interleaved,
+        pp,
         fsi_parameter,
         relaxation_factor,
         h_new,
-    )[1]
+    )
 
     # Initialize flow arrays
     h_n = flow_arrays["h_n"]
@@ -68,14 +69,14 @@ def test_flow(plot=True):
 
     # flow rate calculation
     qq = flow_rate(
-        x_n, dx_e, dt, strouhal_number, inlet_flow_rate, channel_height[::2], h_n, h_n_1
+        x_n, dx_e, dt, strouhal_number, inlet_flow_rate, channel_height, h_n, h_n_1
     )
     if plot:
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(3, 1)
         ax[0].plot(x_n, pp)
-        ax[1].plot(x_n, channel_height[::2])
+        ax[1].plot(x_n, channel_height)
         ax[2].plot(x_n, qq)
 
         ax[0].set_xlabel("x")

@@ -35,8 +35,8 @@ def two_way_coupled_fsi(
         outer_iteration_number += 1
         ###############################################################################################################
         inner_iteration_number = 0
-        inner_residual_number = 1
-        while inner_residual_number > 10e-06 and inner_iteration_number<20000:
+        inner_residual = 1
+        while inner_residual > 10e-06 and inner_iteration_number<20000:
             # pressure calculation
             p = pressure(
                 x_n,
@@ -51,20 +51,17 @@ def two_way_coupled_fsi(
                 q_n_1,
             )
 
-            channel_pressure_solid_equation = np.zeros(len(p) * 2)
-            channel_pressure_solid_equation[::2] = p
-
             # height calculation
             h_star = euler_bernoulli_transient(
                 x_n,
                 element_length,
-                0,
+                1,
                 time_step_size,
-                channel_pressure_solid_equation,
+                p,
                 fsi_parameter,
                 relaxation_factor,
                 h_new,
-            )[1]
+            )
 
             #flow rate calculation
             q_star = flow_rate(
@@ -73,24 +70,23 @@ def two_way_coupled_fsi(
                 time_step_size,
                 strouhal_number,
                 inlet_flow_rate,
-                h_star[::2],
+                h_star,
                 h_n,
                 h_n_1,
             )
 
             # update inner iteration
-            if max(abs(h_new - 1)) < 1e-16:
-                inner_res1 = max(abs(h_star - h_new)) / (max(abs(h_new)) + 1e-16)
+            if max(abs(h_new - 1)) < 1e-8:
+                inner_residual1 = max(abs(h_star - h_new)) / (max(abs(h_new)) + 1e-8)
             else:
-                inner_res1 = max(abs(h_star - h_new)) / max(abs(h_new))
+                inner_residual1 = max(abs(h_star - h_new)) / max(abs(h_new))
 
-            if max(abs(p_inner)) < 1e-16:
-                inner_res2 = max(abs(p - p_inner)) / (max(abs(p_inner)) + 1e-16)
+            if max(abs(p_inner)) < 1e-8:
+                inner_residual2 = max(abs(p - p_inner)) / (max(abs(p_inner)) + 1e-8)
             else:
-                inner_res2 = max(abs(p - p_inner)) / max(abs(p_inner))
+                inner_residual2 = max(abs(p - p_inner)) / max(abs(p_inner))
 
-            inner_res = max(inner_res1, inner_res2)
-            inner_resold = inner_res
+            inner_residual = max(inner_residual1, inner_residual2)
 
             p_inner = p
             h_new = h_star
@@ -99,13 +95,15 @@ def two_way_coupled_fsi(
         # residuals
         res1 = np.linalg.norm(abs(h_new - h_n)) / np.sqrt(np.size(h_new))
         res2 = np.max(abs(h_new - h_n))
-        print(time, res1, res2)
+        #print(time, res1, res2)
 
 
         h_n_1 = h_n
         h_n = h_new
         q_n_1 = q_n
         q_n = q_new
+
+    return h_n
 
 
 

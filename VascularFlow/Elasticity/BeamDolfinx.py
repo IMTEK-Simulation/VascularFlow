@@ -10,7 +10,7 @@ import ufl
 
 
 def euler_bernoulli_transient_dolfinx(
-    nb_nodes, time_step_size, end_time, load, beta, relaxation, H_new
+    nb_nodes, time_step_size, nb_time_steps, load, beta, relaxation, H_new
 ):
     """
     calculate the deflection of a beam under the Euler Bernoulli beam theory using FEniCSx
@@ -91,7 +91,6 @@ def euler_bernoulli_transient_dolfinx(
     # Store results for animation
     displacement_history = []
     # time-stepping loop
-    nb_time_steps = end_time / time_step_size
     for n in range(nb_time_steps):
         time = n * time_step_size
 

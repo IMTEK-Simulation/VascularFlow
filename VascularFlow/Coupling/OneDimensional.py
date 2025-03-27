@@ -3,7 +3,8 @@ import numpy as np
 from VascularFlow.Elasticity.Beam import euler_bernoulli_transient
 from VascularFlow.Flow.Flow import flow_rate
 from VascularFlow.Flow.Pressure import pressure
-
+from VascularFlow.Initialization.InitializeConstants import initialize_constants
+from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arrays
 
 def two_way_coupled_fsi(
     nb_nodes: int,
@@ -40,7 +41,7 @@ def two_way_coupled_fsi(
         outer_iteration_number += 1
         inner_iteration_number = 0
         inner_residual = 1
-        while inner_residual > 10e-04 and inner_iteration_number < 100:
+        while inner_residual > 10e-08 and inner_iteration_number < 10000:
             # pressure calculation
             p = pressure(
                 x_n,
@@ -80,8 +81,15 @@ def two_way_coupled_fsi(
             )
 
             # update inner iteration
-            inner_residual1 = max(abs(h_star - h_new)) / max(abs(h_new))
-            inner_residual2 = max(abs(p - p_inner)) / max(abs(p_inner))
+            if max(abs(h_new - 1)) < 10e-20:
+                inner_residual1 = max(abs(h_star - h_new)) / (max(abs(h_new)) + 10e-20)
+            else:
+                inner_residual1 = max(abs(h_star - h_new)) / max(abs(h_new))
+
+            if max(abs(p_inner)) < 10e-20:
+                inner_residual2 = max(abs(p - p_inner)) / (max(abs(p_inner)) + 10e-20)
+            else:
+                inner_residual2 = max(abs(p - p_inner)) / max(abs(p_inner))
 
             inner_residual = max(inner_residual1, inner_residual2)
 
@@ -89,13 +97,21 @@ def two_way_coupled_fsi(
             iteration_indices.append(global_inner_counter)
             global_inner_counter += 1
 
+
+
             p_inner = p
             h_new = h_star
+            q_new = q_star
+
             inner_iteration_number += 1
+
+
+        print(f"Time: {time:.5f}, Inner Iteration: {inner_iteration_number}, Inner Residual: {inner_residual:.5e}", flush=True)
 
         h_n_1 = h_n
         h_n = h_new
         q_n_1 = q_n
         q_n = q_new
 
-    return h_n, residual_values, iteration_indices
+    return h_n, q_n, p, residual_values, iteration_indices
+

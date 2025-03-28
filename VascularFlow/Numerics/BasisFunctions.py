@@ -49,19 +49,29 @@ class QuadraticBasis(BasisFunction):
 
 
 class HermiteBasis(BasisFunction):
-    """Basis function with two degrees of freedom at every node of the element"""
+    """Third-degree polynomial basis function with two degrees of freedom at each node of the element"""
+
     _nb_nodes = 4
 
     def eval(self, x: np.array) -> np.ndarray:
         return np.array(
-            [2 * x**3 - 3 * x**2 + 1, x**3 - 2 * x**2 + x, -2 * x**3 + 3 * x**2, x**3 - x**2]
+            [
+                2 * x**3 - 3 * x**2 + 1,
+                x**3 - 2 * x**2 + x,
+                -2 * x**3 + 3 * x**2,
+                x**3 - x**2,
+            ]
         )
+
     def first_derivative(self, x: np.array) -> np.ndarray:
         return np.array(
-            [6 * x**2 - 6 * x, 3 * x**2 - 4 * x + 1, -6 * x**2 + 6 * x, 3 * x**2 - 2 * x]
+            [
+                6 * x**2 - 6 * x,
+                3 * x**2 - 4 * x + 1,
+                -6 * x**2 + 6 * x,
+                3 * x**2 - 2 * x,
+            ]
         )
 
     def second_derivative(self, x: np.array) -> np.ndarray:
-        return np.array(
-            [12 * x - 6, 6 * x -4, -12 * x + 6, 6 * x - 2]
-        )
+        return np.array([12 * x - 6, 6 * x - 4, -12 * x + 6, 6 * x - 2])

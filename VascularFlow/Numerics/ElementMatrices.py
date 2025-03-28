@@ -15,48 +15,61 @@ def element_matrix(nb_quad_pts: int, f: callable, g: callable):
 
     return gaussian_quadrature(nb_quad_pts, 0, 1, outer_product)
 
-def dx_matrix(dx: float):
-    diagonal = np.array([1/dx**3, 1/dx, 1/dx**3, 1/dx])
-    off_diagonal = np.array([1 / dx ** 3, 1 / dx])
-    return diags(
-        [1/dx**2, off_diagonal, 1/dx**2, diagonal, 1/dx**2, off_diagonal, 1/dx**2],
-        [-3, -2, -1, 0, 1, 2, 3], shape=(4, 4)
-    ).toarray()
 
-def dx_matrix_mass(dx):
-    return [
-        [dx,    dx**2, dx,    dx**2],
-        [dx**2, dx**3, dx**2, dx**3],
-        [dx,    dx**2, dx,    dx**2],
-        [dx**2, dx**3, dx**2, dx**3],
+def stiffness_matrix_fourth_derivative(
+    nb_quad_pts: int, dx_e: float, basis_function: BasisFunction
+):
+    """Stiffness matrix used in 1D Euler–Bernoulli beam equation (steady) for displacement calculation."""
+    dx_e_stiffness_matrix = [
+        [1 / dx_e**3, 1 / dx_e**2, 1 / dx_e**3, 1 / dx_e**2],
+        [1 / dx_e**2, 1 / dx_e, 1 / dx_e**2, 1 / dx_e],
+        [1 / dx_e**3, 1 / dx_e**2, 1 / dx_e**3, 1 / dx_e**2],
+        [1 / dx_e**2, 1 / dx_e, 1 / dx_e**2, 1 / dx_e],
     ]
-
-
-def first_first(nb_quad_pts: int, basis_function: BasisFunction):
-    return element_matrix(
-        nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
+    return (
+        element_matrix(
+            nb_quad_pts,
+            basis_function.second_derivative,
+            basis_function.second_derivative,
+        )
+        * dx_e_stiffness_matrix
     )
 
-def eval_first(nb_quad_pts: int, basis_function: BasisFunction):
+
+def mass_matrix_fourth_derivatives(
+    nb_quad_pts: int, dx_e: float, basis_function: BasisFunction
+):
+    """mass matrix used in 1D Euler–Bernoulli beam equation (transient) for displacement calculation."""
+    dx_e_mass_matrix = [
+        [dx_e, dx_e**2, dx_e, dx_e**2],
+        [dx_e**2, dx_e**3, dx_e**2, dx_e**3],
+        [dx_e, dx_e**2, dx_e, dx_e**2],
+        [dx_e**2, dx_e**3, dx_e**2, dx_e**3],
+    ]
+    return (
+        element_matrix(nb_quad_pts, basis_function.eval, basis_function.eval)
+        * dx_e_mass_matrix
+    )
+
+
+def load_vector_fourth_derivatives(dx_e: float):
+    """load vector used in 1D Euler–Bernoulli beam equation for displacement calculation"""
+    return np.array([dx_e / 2, dx_e**2 / 12, dx_e / 2, -(dx_e**2) / 12])
+
+
+def stiffness_matrix_first_derivative(nb_quad_pts: int, basis_function: BasisFunction):
+    """stiffness matrix used in Navier-Stocks equations for fluid pressure and flow rate calculation"""
     return element_matrix(
         nb_quad_pts, basis_function.eval, basis_function.first_derivative
     )
 
 
-def second_second(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
+def load_vector_first_derivative(dx_e: float):
+    """load vector used in Navier-Stocks equations for fluid pressure and flow rate calculation"""
+    return np.array([dx_e / 2, dx_e / 2])
+
+
+def stiffness_matrix_second_derivative(nb_quad_pts: int, basis_function: BasisFunction):
     return element_matrix(
-        nb_quad_pts, basis_function.second_derivative, basis_function.second_derivative
-    ) * dx_matrix(dx)
-
-def force_matrix(dx: int):
-    return np.array([dx/2, dx**2/12, dx/2, -dx**2/12])
-
-
-def force_matrix_pressure(dx: int):
-    return np.array([dx/2, dx/2])
-
-
-def mass_matrix(nb_quad_pts: int, dx:int, basis_function: BasisFunction):
-    return element_matrix(
-        nb_quad_pts, basis_function.eval, basis_function.eval
-    ) * dx_matrix_mass(dx)
+        nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
+    )

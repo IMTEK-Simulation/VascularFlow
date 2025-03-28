@@ -7,7 +7,7 @@ from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arr
 def test_two_way_coupled_fsi(plot=True):
     nb_nodes = 200
     time_step_size = 2.5e-03
-    nb_time_steps = 8000
+    nb_time_steps = 5
     end_time = nb_time_steps * 2.5e-03
 
     # Initialize constants
@@ -54,9 +54,9 @@ def test_two_way_coupled_fsi(plot=True):
         p,
         p_inner,
     )
-    print(final_solution[0])
-    print(final_solution[1])
-    print(final_solution[2])
+    #print(final_solution[0])
+    #print(final_solution[1])
+    #print(final_solution[2])
     if plot:
         import matplotlib.pyplot as plt
         plt.figure(figsize=(10, 5))

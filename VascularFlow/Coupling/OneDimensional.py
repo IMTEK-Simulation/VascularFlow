@@ -41,7 +41,7 @@ def two_way_coupled_fsi(
         outer_iteration_number += 1
         inner_iteration_number = 0
         inner_residual = 1
-        while inner_residual > 10e-08 and inner_iteration_number < 10000:
+        while inner_residual > 10e-08 and inner_iteration_number < 500:
             # pressure calculation
             p = pressure(
                 x_n,

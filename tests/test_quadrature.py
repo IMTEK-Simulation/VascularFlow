@@ -30,17 +30,17 @@ def test_gaussian_quadrature():
     np.testing.assert_allclose(gaussian_quadrature(2, 1, 3, f), 24.0)
 
 
-@pytest.mark.parametrize("nb_quad_pts", [3])  # Different quadrature points
-def test_integral_first_hermite_basis(nb_quad_pts):
-    basis_function = HermiteBasis()  # Create instance
-    func = lambda x: basis_function.eval(x)[3]  # First element of eval(x)
+@pytest.mark.parametrize("nb_quad_pts", [3])
+def test_gaussian_quadrature_hermite_basis(nb_quad_pts):
+    basis_function = HermiteBasis()
+    expected_values = [0.5, 0.083, 0.5, -0.083]
 
-    integral_value = gaussian_quadrature(nb_quad_pts, 0, 1, func)  # Integrate over [0,1]
+    for i in range(basis_function.nb_nodes):
+        func = lambda x: basis_function.eval(x)[i]
+        integral_value = gaussian_quadrature(nb_quad_pts, 0, 1, func)
+        expected_value = expected_values[i]
+        assert np.isclose(
+            integral_value, expected_value, atol=1e-2
+        ), f"Basis {i}: got {integral_value}, expected {expected_value}"
 
-    expected_value = -0.08  # Expected integral (analytically computed for reference)
-
-    assert np.isclose(integral_value, expected_value, atol=1e-2), \
-        f"Integral value is {integral_value}, expected {expected_value}"
-
-    print(f"Integral of first HermiteBasis function over [0,1] ≈ {integral_value}")
-
+        print(f"Integral of HermiteBasis[{i}] over [0,1] ≈ {integral_value}")

@@ -15,48 +15,67 @@ def element_matrix(nb_quad_pts: int, f: callable, g: callable):
 
     return gaussian_quadrature(nb_quad_pts, 0, 1, outer_product)
 
-def dx_matrix(dx: float):
-    diagonal = np.array([1/dx**3, 1/dx, 1/dx**3, 1/dx])
-    off_diagonal = np.array([1 / dx ** 3, 1 / dx])
-    return diags(
-        [1/dx**2, off_diagonal, 1/dx**2, diagonal, 1/dx**2, off_diagonal, 1/dx**2],
-        [-3, -2, -1, 0, 1, 2, 3], shape=(4, 4)
-    ).toarray()
-
-def dx_matrix_mass(dx):
-    return [
-        [dx,    dx**2, dx,    dx**2],
-        [dx**2, dx**3, dx**2, dx**3],
-        [dx,    dx**2, dx,    dx**2],
-        [dx**2, dx**3, dx**2, dx**3],
-    ]
-
+def eval_first(nb_quad_pts: int, basis_function: BasisFunction):
+    # Stiffness matrix used for pressure and flow rate calculation in Navier-Stokes equations
+    return element_matrix(
+        nb_quad_pts, basis_function.eval, basis_function.first_derivative
+    )
 
 def first_first(nb_quad_pts: int, basis_function: BasisFunction):
     return element_matrix(
         nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
     )
 
-def eval_first(nb_quad_pts: int, basis_function: BasisFunction):
-    return element_matrix(
-        nb_quad_pts, basis_function.eval, basis_function.first_derivative
-    )
+def second_second(nb_quad_pts: int, dx: float, basis_function: BasisFunction):
+    # Stiffness matrix used for displacement calculation in Euler–Bernoulli beam equation
+    dx_matrix = [
+        [1 / dx**3, 1 / dx**2, 1 / dx**3, 1 / dx**2],
+        [1 / dx**2, 1 / dx, 1 / dx**2, 1 / dx],
+        [1 / dx**3, 1 / dx**2, 1 / dx**3, 1 / dx**2],
+        [1 / dx**2, 1 / dx, 1 / dx**2, 1 / dx],
+    ]
 
-
-def second_second(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
     return element_matrix(
         nb_quad_pts, basis_function.second_derivative, basis_function.second_derivative
-    ) * dx_matrix(dx)
+    ) * dx_matrix
+
+
+
+
+
+
+
+
+
+
+
+def dx_matrix_mass(dx):
+    return [
+        [dx, dx**2, dx, dx**2],
+        [dx**2, dx**3, dx**2, dx**3],
+        [dx, dx**2, dx, dx**2],
+        [dx**2, dx**3, dx**2, dx**3],
+    ]
+
+
+
+
+
+
+
+
+
+
 
 def force_matrix(dx: int):
-    return np.array([dx/2, dx**2/12, dx/2, -dx**2/12])
+    return np.array([dx / 2, dx**2 / 12, dx / 2, -(dx**2) / 12])
 
 
 def force_matrix_pressure(dx: int):
-    return np.array([dx/2, dx/2])
+    return np.array([dx / 2, dx / 2])
 
 
-def mass_matrix(nb_quad_pts: int, dx:int, basis_function: BasisFunction):
+def mass_matrix(nb_quad_pts: int, dx: int, basis_function: BasisFunction):
     return element_matrix(
         nb_quad_pts, basis_function.eval, basis_function.eval
     ) * dx_matrix_mass(dx)

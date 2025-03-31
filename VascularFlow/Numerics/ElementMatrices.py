@@ -1,11 +1,42 @@
+"""
+Definition of matrices for a single element used in 1D finite element methods.
+
+Intervals:
+- Interpolation in an arbitrary interval
+
+Basis function types:
+- LinearBasis
+- QuadraticBasis
+- HermiteBasis
+"""
+
 import numpy as np
-from scipy.sparse import diags
 
 from VascularFlow.Numerics.BasisFunctions import BasisFunction
 from VascularFlow.Numerics.Quadrature import gaussian_quadrature
 
 
-def element_matrix(nb_quad_pts: int, f: callable, g: callable):
+def element_matrix(nb_quad_pts: int, y_n: np.ndarray, f: callable, g: callable):
+    """
+    compute ∫f.g dx using Gaussian quadrature rule in an arbitrary interval used in definition of element matrices.
+
+    Parameters
+    ----------
+    nb_quad_pts : int
+        Number of quadrature points.
+    y_n : np.ndarray
+        The integral arbitrary interval.
+    f : callable
+        An arbitrary function.
+    g : callable
+        An arbitrary function.
+
+    Returns
+    -------
+    gaussian_quadrature
+        The value of the Gaussian quadrature rule.
+    """
+
     def outer_product(x_q: np.array) -> np.array:
         f_nq = f(x_q)
         g_nq = g(x_q)
@@ -13,63 +44,113 @@ def element_matrix(nb_quad_pts: int, f: callable, g: callable):
         assert g_nq.shape == (n, q)
         return f_nq.reshape(n, 1, q) * g_nq.reshape(1, n, q)
 
-    return gaussian_quadrature(nb_quad_pts, 0, 1, outer_product)
+    return gaussian_quadrature(nb_quad_pts, y_n[0], y_n[1], outer_product)
 
 
 def stiffness_matrix_fourth_derivative(
-    nb_quad_pts: int, dx_e: float, basis_function: BasisFunction
+    nb_quad_pts: int, y_n: np.ndarray, basis_function: BasisFunction
 ):
-    """Stiffness matrix used in 1D Euler–Bernoulli beam equation (steady) for displacement calculation."""
-    dx_e_stiffness_matrix = [
-        [1 / dx_e**3, 1 / dx_e**2, 1 / dx_e**3, 1 / dx_e**2],
-        [1 / dx_e**2, 1 / dx_e, 1 / dx_e**2, 1 / dx_e],
-        [1 / dx_e**3, 1 / dx_e**2, 1 / dx_e**3, 1 / dx_e**2],
-        [1 / dx_e**2, 1 / dx_e, 1 / dx_e**2, 1 / dx_e],
-    ]
-    return (
-        element_matrix(
-            nb_quad_pts,
-            basis_function.second_derivative,
-            basis_function.second_derivative,
+    """Return the stiffness matrix used in Euler–Bernoulli beam equation."""
+
+    nb_nodes = basis_function.nb_nodes
+
+    def f(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate_second_derivative(
+                    y_n, np.eye(nb_nodes)[i], x_q
+                )
+                for i in range(nb_nodes)
+            ]
         )
-        * dx_e_stiffness_matrix
-    )
+
+    return element_matrix(nb_quad_pts, y_n, f, f)
 
 
 def mass_matrix_fourth_derivatives(
-    nb_quad_pts: int, dx_e: float, basis_function: BasisFunction
+    nb_quad_pts: int, y_n: np.ndarray, basis_function: BasisFunction
 ):
-    """mass matrix used in 1D Euler–Bernoulli beam equation (transient) for displacement calculation."""
-    dx_e_mass_matrix = [
-        [dx_e, dx_e**2, dx_e, dx_e**2],
-        [dx_e**2, dx_e**3, dx_e**2, dx_e**3],
-        [dx_e, dx_e**2, dx_e, dx_e**2],
-        [dx_e**2, dx_e**3, dx_e**2, dx_e**3],
-    ]
-    return (
-        element_matrix(nb_quad_pts, basis_function.eval, basis_function.eval)
-        * dx_e_mass_matrix
+    """Return the mass matrix used in Euler–Bernoulli beam equation."""
+    nb_nodes = basis_function.nb_nodes
+
+    def f(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate(y_n, np.eye(nb_nodes)[i], x_q)
+                for i in range(nb_nodes)
+            ]
+        )
+
+    return element_matrix(nb_quad_pts, y_n, f, f)
+
+
+def load_vector(
+    nb_quad_pts: int,
+    y_n: np.ndarray,
+    basis_function: BasisFunction,
+    g: callable = lambda x: np.ones_like(x),
+):
+    """Return the load vector (The external force matrix) used in Euler–Bernoulli beam equation and Navier-Stocks equations."""
+    nb_nodes = basis_function.nb_nodes
+
+    def f(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate(y_n, np.eye(nb_nodes)[i], x_q)
+                for i in range(nb_nodes)
+            ]
+        )
+
+    def g_vec(x_q):
+        return np.ones_like(x_q) * g(x_q)
+
+    return gaussian_quadrature(
+        nb_quad_pts, y_n[0], y_n[1], lambda x_q: f(x_q) * g_vec(x_q)
     )
 
 
-def load_vector_fourth_derivatives(dx_e: float):
-    """load vector used in 1D Euler–Bernoulli beam equation for displacement calculation"""
-    return np.array([dx_e / 2, dx_e**2 / 12, dx_e / 2, -(dx_e**2) / 12])
+def stiffness_matrix_first_derivative(
+    nb_quad_pts: int,
+    y_n: np.ndarray,
+    basis_function: BasisFunction,
+):
+    """Return the stiffness matrix used in Navier-Stocks equation."""
+    nb_nodes = basis_function.nb_nodes
+
+    def f(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate(y_n, np.eye(nb_nodes)[i], x_q)
+                for i in range(nb_nodes)
+            ]
+        )
+
+    def g(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate_first_derivative(
+                    y_n, np.eye(nb_nodes)[j], x_q
+                )
+                for j in range(nb_nodes)
+            ]
+        )
+
+    return element_matrix(nb_quad_pts, y_n, f, g)
 
 
-def stiffness_matrix_first_derivative(nb_quad_pts: int, basis_function: BasisFunction):
-    """stiffness matrix used in Navier-Stocks equations for fluid pressure and flow rate calculation"""
-    return element_matrix(
-        nb_quad_pts, basis_function.eval, basis_function.first_derivative
-    )
+def stiffness_matrix_second_derivative(
+    nb_quad_pts: int, y_n: np.ndarray, basis_function: BasisFunction
+):
+    nb_nodes = basis_function.nb_nodes
 
+    def f(x_q):
+        return np.stack(
+            [
+                basis_function.interpolate_first_derivative(
+                    y_n, np.eye(nb_nodes)[i], x_q
+                )
+                for i in range(nb_nodes)
+            ]
+        )
 
-def load_vector_first_derivative(dx_e: float):
-    """load vector used in Navier-Stocks equations for fluid pressure and flow rate calculation"""
-    return np.array([dx_e / 2, dx_e / 2])
-
-
-def stiffness_matrix_second_derivative(nb_quad_pts: int, basis_function: BasisFunction):
-    return element_matrix(
-        nb_quad_pts, basis_function.first_derivative, basis_function.first_derivative
-    )
+    return element_matrix(nb_quad_pts, y_n, f, f)

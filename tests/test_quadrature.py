@@ -33,14 +33,12 @@ def test_gaussian_quadrature():
 @pytest.mark.parametrize("nb_quad_pts", [3])
 def test_gaussian_quadrature_hermite_basis(nb_quad_pts):
     basis_function = HermiteBasis()
-    expected_values = [0.5, 0.083, 0.5, -0.083]
-
+    y_n = np.array([0.0, 0.5])
+    expected_values = [0.25, 0.041, 0.25, -0.041]
     for i in range(basis_function.nb_nodes):
-        func = lambda x: basis_function.eval(x)[i]
-        integral_value = gaussian_quadrature(nb_quad_pts, 0, 1, func)
+        w_g = np.zeros(basis_function.nb_nodes)
+        w_g[i] = 1.0
+        func = lambda x: basis_function.interpolate(y_n, w_g, x)
+        integral_value = gaussian_quadrature(nb_quad_pts, 0.0, 0.5, func)
         expected_value = expected_values[i]
-        assert np.isclose(
-            integral_value, expected_value, atol=1e-2
-        ), f"Basis {i}: got {integral_value}, expected {expected_value}"
-
-        print(f"Integral of HermiteBasis[{i}] over [0,1] ≈ {integral_value}")
+        assert np.isclose(integral_value, expected_value, atol=1e-2)

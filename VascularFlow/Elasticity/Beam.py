@@ -1,125 +1,164 @@
-import numpy as np
+"""
+1D numerical solution of the non-dimensionalized linear Euler–Bernoulli beam theory
+for an elastic beam of length 1, using the finite element method.
 
-from VascularFlow.Numerics.Assembly import (
-    assemble_system_matrix_2dof,
-    assemble_force_matrix_2dof,
-)
+States:
+- steady (∂4w/∂x4 = q)
+- transient (∂2w/∂t2 + ∂4w/∂x4 = q)
+
+Boundary conditions:
+- zero displacement and rotation at beam ends
+
+Basis function:
+- Hermite basis function
+"""
+
+import numpy as np
+from scipy.sparse.linalg import spsolve
+
+from VascularFlow.Numerics.Assembly import assemble_global_matrices
 from VascularFlow.Numerics.BasisFunctions import HermiteBasis
 from VascularFlow.Numerics.ElementMatrices import (
-    second_second,
-    force_matrix,
-    mass_matrix,
+    stiffness_matrix_fourth_derivative,
+    mass_matrix_fourth_derivatives,
+    load_vector,
+)
+from VascularFlow.BoundaryConditions.ClampedBoundaryCondtion import (
+    clamped_boundary_condition,
 )
 
 
-def euler_bernoulli(x_n, dx_e, p):
+def euler_bernoulli_steady(
+    mesh_nodes: np.array,
+    q: np.array,
+):
     """
-    Calculates the deflection of a beam under the Euler-Bernoulli beam theory.
+    Calculates the deflection (w) and rotation (∂w/∂x) of a clamped beam in steady state.
 
     Parameters
     ----------
-    x_n : np.ndarray
-        The positions of the element boundary along the beam.
-    dx_e : np.ndarray
-        The element length of the beam.
-    q_g : np.ndarray
-        The line-load across the beam for each nodal position along the beam.
-        (The line-load is normalized by EI)
+    mesh_nodes : np.array
+        Global mesh node positions along the beam.
+    q : np.ndarray
+        Distributed load for each nodal position along the beam.
 
     Returns
     -------
-    deflection_n : np.ndarray
+    Deflection_n : np.ndarray
         The deflection of the beam for each nodal position along the beam.
+    Rotation_n : np.ndarray
+        The rotation of the beam for each nodal position along the beam.
     """
-    element_matrix_nn = second_second(3, dx_e, HermiteBasis())
-    nb_nodes, _ = element_matrix_nn.shape
-    nb_elements = len(x_n) - 1
-    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * np.ones(
-        nb_elements
-    ).reshape(nb_elements, 1, 1)
-    system_matrix_gg = assemble_system_matrix_2dof(element_matrices_enn)
+    basis_function = HermiteBasis()
+    element_stiffness_matrix = stiffness_matrix_fourth_derivative
+    element_load_vector = load_vector
+    global_stiffness_matrix, global_load_vector = assemble_global_matrices(
+        mesh_nodes,
+        basis_function,
+        element_stiffness_matrix,
+        element_load_vector,
+        3,
+    )
 
-    rhs1 = force_matrix(dx_e)
-    rhs2 = rhs1.reshape((1, 1, 4)) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
-    system_matrix_ll = assemble_force_matrix_2dof(rhs2) * p
+    lhs = global_stiffness_matrix
+    rhs = global_load_vector * q
 
     # Add boundary conditions
-
-    system_matrix_gg[0] = 0
-    system_matrix_gg[0, 0] = 1
-    system_matrix_gg[1] = 0
-    system_matrix_gg[1, 1] = 1
-    system_matrix_gg[-1] = 0
-    system_matrix_gg[-1, -1] = 1
-    system_matrix_gg[-2] = 0
-    system_matrix_gg[-2, -2] = 1
-
-    system_matrix_ll[0] = 0
-    system_matrix_ll[1] = 0
-    system_matrix_ll[-1] = 0
-    system_matrix_ll[-2] = 0
+    lhs_bc, rhs_bc = clamped_boundary_condition(lhs.copy(), rhs.copy())
 
     # Solve system
-    w_g = np.linalg.solve(system_matrix_gg, system_matrix_ll)
+    solution = spsolve(lhs_bc, rhs_bc)
+    displacement = solution[::2]
+    rotation = solution[1::2]
+    return displacement
 
-    return system_matrix_gg, system_matrix_ll, w_g
 
+def euler_bernoulli_transient(
+    mesh_nodes: np.array,
+    nb_time_steps: int,
+    time_step_size: float,
+    q,
+    beta,
+    relaxation_factor,
+    h_new,
+):
+    """
+    Calculates the deflection (w) and rotation (∂w/∂x) of a clamped beam in transient state.
 
-def euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_new):
-    element_matrix_stiffness = second_second(3, dx_e, HermiteBasis())
-    nb_nodes, _ = element_matrix_stiffness.shape
-    nb_elements = len(x_n) - 1
-    assemble_matrix_stiffness = element_matrix_stiffness.reshape(
-        (1, nb_nodes, nb_nodes)
-    ) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
-    k = assemble_system_matrix_2dof(assemble_matrix_stiffness)
+    Parameters
+    ----------
+    mesh_nodes : np.array
+        Global mesh node positions along the beam.
+    nb_time_steps : int
+        Number of time steps.
+    time_step_size : float
+        Time step size.
+    q : np.ndarray
+        Distributed load for each nodal position along the beam.
+    beta : float
+        Fluid-structure interaction parameter to update channel height from displacement (H = 1 + β w).
+    relaxation_factor : float
+        Under Relaxation factor (URF) ∈ (0,1], used to achieve numerically stable results .
+    h_new : np.ndarray
+        Channel height in next time step used to under-relax calculated channel height (H = URF * H * (1 - URF) * H_new).
 
-    element_matrix_mass = mass_matrix(3, dx_e, HermiteBasis())
-    nb_nodes, _ = element_matrix_mass.shape
-    assemble_matrix_mass = element_matrix_mass.reshape(
-        (1, nb_nodes, nb_nodes)
-    ) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
-    m = assemble_system_matrix_2dof(assemble_matrix_mass)
+    Returns
+    ----------
+    Deflection_n : np.ndarray
+        The deflection of the beam for each nodal position along the beam.
+    Rotation_n : np.ndarray
+        The rotation of the beam for each nodal position along the beam.
+    """
+    basis_function = HermiteBasis()
+    element_stiffness_matrix = stiffness_matrix_fourth_derivative
+    element_mass_matrix = mass_matrix_fourth_derivatives
+    element_load_vector = load_vector
 
-    a = m + (dt**2) * k
+    global_stiffness_matrix, global_vector = assemble_global_matrices(
+        mesh_nodes,
+        basis_function,
+        element_stiffness_matrix,
+        element_load_vector,
+        3,
+    )
+    global_mass_matrix, _ = assemble_global_matrices(
+        mesh_nodes, basis_function, element_mass_matrix, element_load_vector, 3
+    )
 
-    element_load_vector = force_matrix(dx_e)
-    assemble_load_vector = element_load_vector.reshape((1, 1, 4)) * np.ones(
-        nb_elements
-    ).reshape(nb_elements, 1, 1)
-    p_interleaved = np.zeros(len(p) * 2)
-    p_interleaved[::2] = p
-    f = assemble_force_matrix_2dof(assemble_load_vector) * p_interleaved
+    lhs = global_mass_matrix + (time_step_size**2) * global_stiffness_matrix
 
-    a[0] = 0
-    a[0, 0] = 1
-    a[1] = 0
-    a[1, 1] = 1
-    a[-1] = 0
-    a[-1, -1] = 1
-    a[-2] = 0
-    a[-2, -2] = 1
+    q_interleaved = np.zeros(len(q) * 2)
+    q_interleaved[::2] = q
+    global_load_vector = global_vector * q_interleaved
 
-    w_n = np.zeros(2 * len(x_n))
-    w_n1 = np.zeros(2 * len(x_n))
-    for n in range(num_steps):
+    # Add boundary conditions
+    rhs_dummy = np.zeros(lhs.shape[0])
+    lhs_bc, _ = clamped_boundary_condition(lhs.copy(), rhs_dummy)
 
-        r1 = 2 * (m @ w_n)
-        r2 = m @ w_n1
-        r3 = (dt**2) * f
-        q = r1 - r2 + r3
-        q[0] = 0
-        q[1] = 0
-        q[-1] = 0
-        q[-2] = 0
-        w_g = np.linalg.solve(a, q)
+    # Initialized arrays for displacement in current and previous time step.
+    w_n = np.zeros(2 * len(mesh_nodes))
+    w_n_1 = np.zeros(2 * len(mesh_nodes))
+    for n in range(nb_time_steps):
 
-        w_n1 = w_n
-        w_n = w_g
+        f1 = (time_step_size**2) * global_load_vector
+        f2 = 2 * (global_mass_matrix @ w_n)
+        f3 = global_mass_matrix @ w_n_1
 
-    H_new_interleaved = np.zeros(len(H_new) * 2)
-    H_new_interleaved[::2] = H_new
-    H_g = 1 + (beta * w_g)
-    H_g = relaxation * H_g + (1 - relaxation) * H_new_interleaved
+        rhs = f1 + f2 - f3
 
-    return H_g[::2]
+        # Add boundary condition
+        lhs_dummy = np.zeros((len(rhs), len(rhs)))
+        _, rhs_bc = clamped_boundary_condition(lhs_dummy, rhs.copy())
+        w_new = spsolve(lhs_bc, rhs_bc)
+
+        w_n_1 = w_n
+        w_n = w_new
+
+    h_new_interleaved = np.zeros(len(h_new) * 2)
+    h_new_interleaved[::2] = h_new
+    channel_height = 1 + (beta * w_new)
+    channel_height = (
+        relaxation_factor * channel_height + (1 - relaxation_factor) * h_new_interleaved
+    )
+
+    return channel_height[::2]

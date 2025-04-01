@@ -1,97 +1,69 @@
+"""
+Tests for evaluating matrices for a global system of equations used in 1D finite element methods.
+
+This module verifies:
+- Accuracy of the shape of the global matrices in an arbitrary interval.
+
+Tested basis types:
+- LinearBasis
+- QuadraticBasis
+- HermiteBasis
+"""
+
 import numpy as np
+import pytest
 
-from VascularFlow.Numerics.Assembly import assemble_system_matrix_1dof, assemble_system_matrix_2dof, assemble_force_matrix_2dof, assemble_force_matrix_pressure
-from VascularFlow.Numerics.BasisFunctions import LinearBasis, HermiteBasis
-from VascularFlow.Numerics.ElementMatrices import first_first, eval_first, second_second, force_matrix, mass_matrix, force_matrix_pressure
+from VascularFlow.Numerics.Assembly import assemble_global_matrices
 
 
-def test_assemble_2x2():
-    element_matrices_nn = first_first(1, LinearBasis())
+from VascularFlow.Numerics.BasisFunctions import (
+    LinearBasis,
+    HermiteBasis,
+    QuadraticBasis,
+)
+from VascularFlow.Numerics.ElementMatrices import (
+    stiffness_matrix_fourth_derivative,
+    stiffness_matrix_second_derivative,
+    stiffness_matrix_first_derivative,
+    mass_matrix_fourth_derivatives,
+    load_vector,
+)
 
-    np.testing.assert_allclose(element_matrices_nn, [[1, -1], [-1, 1]])
 
-    element_matrices_enn = element_matrices_nn.reshape((1, 2, 2)) * np.ones(3).reshape(
-        (3, 1, 1)
+@pytest.mark.parametrize(
+    "basis_function_class, element_matrix_func, element_vector_func",
+    [
+        (HermiteBasis, stiffness_matrix_fourth_derivative, load_vector),
+        (HermiteBasis, mass_matrix_fourth_derivatives, load_vector),
+        (QuadraticBasis, stiffness_matrix_first_derivative, load_vector),
+        (LinearBasis, stiffness_matrix_second_derivative, load_vector),
+    ],
+)
+def test_global_assembly(
+    basis_function_class, element_matrix_func, element_vector_func
+):
+    mesh_nodes = np.linspace(0, 1, 3)
+    nb_quadrature_points = 3
+
+    basis_function = basis_function_class()
+
+    global_matrix, global_vector = assemble_global_matrices(
+        mesh_nodes,
+        basis_function,
+        element_matrix_func,
+        element_vector_func,
+        nb_quadrature_points,
     )
+    print(global_matrix.shape)
+    print(global_matrix)
+    print(global_vector.shape)
+    print(global_vector)
 
-    system_matrix_gg = assemble_system_matrix_1dof(element_matrices_enn)
+    dofs_per_node = basis_function.dof_per_node
+    nb_nodes = basis_function.nb_nodes
+    nb_elements = len(mesh_nodes) - 1
+    total_dofs = nb_elements * (nb_nodes - dofs_per_node) + dofs_per_node
 
-    assert system_matrix_gg.shape == (4, 4)
-
-    np.testing.assert_allclose(
-        system_matrix_gg,
-        [[1, -1, 0, 0], [-1, 2, -1, 0], [0, -1, 2, -1], [0, 0, -1, 1]],
-        atol=1e-6,
-    )
-
-
-def test_assemble_2x2_eval_first():
-    element_matrices_nn = eval_first(1, LinearBasis())
-
-    element_matrices_enn = element_matrices_nn.reshape((1, 2, 2)) * np.ones(3).reshape(
-        (3, 1, 1)
-    )
-
-    system_matrix_gg = assemble_system_matrix_1dof(element_matrices_enn)
-    print(system_matrix_gg.shape)
-    print(system_matrix_gg)
-
-
-
-def test_assemble_3x3():
-    element_matrices_nn = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])
-    element_matrices_enn = element_matrices_nn.reshape((1, 3, 3)) * np.ones(3).reshape(
-        (3, 1, 1)
-    )
-
-    system_matrix_gg = assemble_system_matrix_1dof(element_matrices_enn)
-
-    assert system_matrix_gg.shape == (7, 7)
-
-    np.testing.assert_allclose(
-        system_matrix_gg,
-        [
-            [1, 1, 1, 0, 0, 0, 0],
-            [1, 1, 1, 0, 0, 0, 0],
-            [1, 1, 2, 1, 1, 0, 0],
-            [0, 0, 1, 1, 1, 0, 0],
-            [0, 0, 1, 1, 2, 1, 1],
-            [0, 0, 0, 0, 1, 1, 1],
-            [0, 0, 0, 0, 1, 1, 1],
-        ],
-        atol=1e-6,
-    )
-
-
-def test_assemble_hermite():
-    element_matrices_nn = second_second(3, 2, HermiteBasis())
-    element_matrices_enn = element_matrices_nn.reshape((1, 4, 4)) * np.ones(3).reshape(3, 1, 1)
-    print(element_matrices_enn.shape)
-    system_matrix_gg = assemble_system_matrix_2dof(element_matrices_enn)
-    print(system_matrix_gg)
-
-def test_assemble_mass_matrix():
-    element_matrices_nn = mass_matrix(3, 1, HermiteBasis())
-    element_matrices_enn = element_matrices_nn.reshape((1, 4, 4)) * np.ones(2).reshape(2, 1, 1)
-    system_matrix_gg = assemble_system_matrix_2dof(element_matrices_enn)
-    print(system_matrix_gg.shape)
-    print(system_matrix_gg)
-
-
-
-def test_assemble_force_matrix():
-    element_matrices_nn = force_matrix(1)
-    element_matrices_enn = element_matrices_nn.reshape((1, 1, 4)) * np.ones(3).reshape(3, 1, 1)
-    system_matrix_gg = assemble_force_matrix_2dof(element_matrices_enn)
-    print(system_matrix_gg)
-
-
-def test_assemble_force_matrix_pressure():
-    element_matrices_nn = force_matrix_pressure(1)
-    element_matrices_nn = element_matrices_nn.reshape((1, 1, 2)) * np.ones(3).reshape(3, 1, 1)
-    system_matrix_gg = assemble_force_matrix_pressure(element_matrices_nn)
-    print(system_matrix_gg)
-
-
-
-
+    # Basic assertions
+    assert global_matrix.shape == (total_dofs, total_dofs)
+    assert global_vector.shape == (total_dofs,)

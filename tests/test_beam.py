@@ -1,58 +1,94 @@
+"""
+
+Compare the 1D numerical and analytical solutions of the linear Euler–Bernoulli beam equation
+for an elastic beam of length 1, subjected to a constant distributed load applied at each nodal position.
+
+"""
+
 import numpy as np
+import pytest
+from VascularFlow.Elasticity.Beam import (
+    euler_bernoulli_steady,
+    euler_bernoulli_transient,
+)
 
-from VascularFlow.Elasticity.Beam import euler_bernoulli, euler_bernoulli_transient
-from VascularFlow.Numerics.BasisFunctions import QuadraticBasis
-from VascularFlow.Numerics.ElementMatrices import force_matrix
 
-
-def test_euler_bernoulli_constant_load(plot=True):
+@pytest.mark.parametrize(
+    "nb_mesh_nodes, constant_load",
+    [
+        (11, 1),
+        (101, 5),
+    ],
+)
+def test_euler_bernoulli_steady_constant_load(nb_mesh_nodes, constant_load, plot=False):
     left = 0
     right = 1
-    x_n = np.linspace(left, right, 11)
-    dx_e = (right - left) / (len(x_n) - 1)
-    p = np.ones(len(x_n) * 2)
-    p[1::2] = 0
-
-    lhs_matrix = euler_bernoulli(x_n, dx_e, p)[0]
-    rhs_matrix = euler_bernoulli(x_n, dx_e, p)[1]
-    det = np.linalg.det(lhs_matrix)
-
-
-
-    w_g = euler_bernoulli(x_n, dx_e , p)[2]
-    exact = (x_n ** 4 / 24) - (x_n ** 3 / 12) + (x_n ** 2 / 24)
-    print(w_g.shape)
+    mesh_nodes = np.linspace(left, right, nb_mesh_nodes)
+    distributed_load = np.full(2 * nb_mesh_nodes, constant_load)
+    distributed_load[1::2] = 0
+    disp = euler_bernoulli_steady(mesh_nodes, distributed_load)
+    x_n = mesh_nodes
+    # analytical solution for ∂4w/∂x4 = constant load
+    disp_exact = (
+        (constant_load / 24) * x_n**4
+        - (constant_load / 12) * x_n**3
+        + (constant_load / 24) * x_n**2
+    )
+    np.testing.assert_allclose(disp, disp_exact, rtol=1e-4, atol=1e-8)
 
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(x_n, w_g[::2])
-        plt.plot(x_n, w_g[1::2])
-        #plt.plot(x_n, exact, '*')
-        #plt.plot(x, w_g.dot(QuadraticBasis().eval(x_g)))
-        plt.xlabel('x')
-        plt.ylabel('w')
+
+        plt.plot(mesh_nodes, disp, "+", label="numerical solution")
+        plt.plot(mesh_nodes, disp_exact, "*", label="exact solution")
+        plt.xlabel("x")
+        plt.ylabel("displacement")
+        plt.legend()
+        plt.title("Euler Bernoulli steady, numerical vs analytical")
         plt.show()
 
 
 def test_euler_bernoulli_constant_load_transient(plot=True):
     left = 0
     right = 1
-    x_n = np.linspace(left, right, 101)
-    dx_e = (right - left) / (len(x_n) - 1)
-    dt = 2.5e-03
-    num_steps = 1
-    p = (-12 * x_n + 12)
-    #p_interleaved = np.zeros(len(p) * 2)
-    #p_interleaved[::2] = p
-    beta = 35156.24
-    relaxation = 0.00003
-    H_new = np.ones(len(x_n))
+    mesh_nodes = np.linspace(left, right, 101)
 
-    channel_height = euler_bernoulli_transient(x_n, dx_e, num_steps, dt, p, beta, relaxation, H_new)
+    time_step_size = 2.5e-03
+    nb_time_steps = 2000
+    distributed_load = np.ones(len(mesh_nodes))
+    beta = 35156.24
+    relaxation_factor = 0.00003
+    h_new = np.ones(len(mesh_nodes))
+
+    channel_height = euler_bernoulli_transient(
+        mesh_nodes,
+        nb_time_steps,
+        time_step_size,
+        distributed_load,
+        beta,
+        relaxation_factor,
+        h_new,
+    )
+
+    x_n = mesh_nodes
+    # analytical solution for ∂4w/∂x4 = 1
+    disp_exact = (1 / 24) * x_n**4 - (1 / 12) * x_n**3 + (1 / 24) * x_n**2
+    # update channel height
+    channel_height_exact = 1 + beta * disp_exact
+    channel_height_exact = (
+        relaxation_factor * channel_height_exact + (1 - relaxation_factor) * h_new
+    )
+    np.testing.assert_allclose(
+        channel_height_exact, channel_height, rtol=1e-4, atol=1e-8
+    )
 
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(x_n, channel_height)
-        plt.xlabel('x')
-        plt.ylabel('displacement')
+
+        plt.plot(mesh_nodes, channel_height, "+", label="numerical solution")
+        plt.plot(mesh_nodes, channel_height_exact, "*", label="exact solution")
+        plt.xlabel("x")
+        plt.ylabel("displacement")
+        plt.legend()
+        plt.title("Euler Bernoulli transient, numerical vs analytical")
         plt.show()

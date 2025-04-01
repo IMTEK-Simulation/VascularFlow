@@ -29,110 +29,71 @@ from VascularFlow.Numerics.ElementMatrices import (
 
 
 @pytest.mark.parametrize(
-    "basis_class, expected, atol",
+    "basis_function_class, element_matrix_or_vector",
     [
-        (
-            HermiteBasis,
-            np.array(
-                [
-                    [96, 48, -96, 48],
-                    [48, 32, -48, 16],
-                    [-96, -48, 96, -48],
-                    [48, 16, -48, 32],
-                ]
-            ),
-            1e-12,
-        )
+        (HermiteBasis, stiffness_matrix_fourth_derivative),
+        (HermiteBasis, mass_matrix_fourth_derivatives),
+        (HermiteBasis, load_vector),
+        (QuadraticBasis, stiffness_matrix_first_derivative),
+        (QuadraticBasis, load_vector),
+        (LinearBasis, stiffness_matrix_second_derivative),
     ],
 )
-def test_stiffness_matrix_fourth_derivative(basis_class, expected, atol):
+def test_element_matrix_or_vector(basis_function_class, element_matrix_or_vector):
+    nb_quadrature_points = 3
     y_n = np.array([0, 0.5])
-    k = stiffness_matrix_fourth_derivative(3, y_n, basis_class())
-    assert k.shape == expected.shape
-    np.testing.assert_allclose(k, expected, atol=atol)
-
-
-@pytest.mark.parametrize(
-    "basis_class, expected, atol",
-    [
-        (
-            HermiteBasis,
-            np.array(
-                [
-                    [156, 22, 54, -13],
-                    [22, 4, 13, -3],
-                    [54, 13, 156, -22],
-                    [-13, -3, -22, 4],
-                ]
-            )
-            / 840,
-            8e-4,
+    basis_function = basis_function_class()
+    result = element_matrix_or_vector(nb_quadrature_points, y_n, basis_function)
+    print(result.shape)
+    print(result)
+    expected_lookup = {
+        (HermiteBasis, stiffness_matrix_fourth_derivative): np.array(
+            [
+                [96, 48, -96, 48],
+                [48, 32, -48, 16],
+                [-96, -48, 96, -48],
+                [48, 16, -48, 32],
+            ]
+        ),
+        (HermiteBasis, mass_matrix_fourth_derivatives): np.array(
+            [
+                [156, 22, 54, -13],
+                [22, 4, 13, -3],
+                [54, 13, 156, -22],
+                [-13, -3, -22, 4],
+            ]
         )
-    ],
-)
-def test_mass_matrix_fourth_derivatives(basis_class, expected, atol):
-    y_n = np.array([0, 0.5])
-    m = mass_matrix_fourth_derivatives(3, y_n, basis_class())
-    assert m.shape == expected.shape
-    np.testing.assert_allclose(m, expected, atol=atol)
+        / 840,
+        (HermiteBasis, load_vector): np.array([1 / 4, 1 / 24, 1 / 4, -1 / 24]),
+        (QuadraticBasis, stiffness_matrix_first_derivative): np.array(
+            [
+                [-0.5, 0.66, -0.16],
+                [-0.66, 0.0, 0.66],
+                [0.16, -0.66, 0.5],
+            ]
+        ),
+        (QuadraticBasis, load_vector): np.array([0.083, 0.33, 0.083]),
+        (LinearBasis, stiffness_matrix_second_derivative): np.array(
+            [
+                [2, -2],
+                [-2, 2],
+            ]
+        ),
+    }
 
+    # Tolerances for each case
+    atol_lookup = {
+        (HermiteBasis, stiffness_matrix_fourth_derivative): 1e-12,
+        (HermiteBasis, mass_matrix_fourth_derivatives): 8e-4,
+        (HermiteBasis, load_vector): 1e-8,
+        (QuadraticBasis, stiffness_matrix_first_derivative): 7e-3,
+        (QuadraticBasis, load_vector): 4e-3,
+        (LinearBasis, stiffness_matrix_second_derivative): 1e-10,
+    }
 
-@pytest.mark.parametrize(
-    "basis_class, expected, atol",
-    [(HermiteBasis, np.array([1 / 4, 1 / 24, 1 / 4, -1 / 24]), 1e-8)],
-)
-def test_load_vector_fourth_derivatives(basis_class, expected, atol):
-    y_n = np.array([0, 0.5])
-    f = load_vector(3, y_n, basis_class())
-    assert f.shape == expected.shape
-    np.testing.assert_allclose(f, expected, atol=atol)
+    expected = expected_lookup[(basis_function_class, element_matrix_or_vector)]
+    atol = atol_lookup[(basis_function_class, element_matrix_or_vector)]
 
-
-@pytest.mark.parametrize(
-    "basis_class, expected, atol",
-    [
-        (
-            QuadraticBasis,
-            np.array([[-0.5, 0.66, -0.16], [-0.66, 0.0, 0.66], [0.16, -0.66, 0.5]]),
-            7e-3,
-        )
-    ],
-)
-def test_stiffness_matrix_first_derivative(basis_class, expected, atol):
-    y_n = np.array([0, 0.5])
-    k = stiffness_matrix_first_derivative(4, y_n, basis_class())
-    assert k.shape == expected.shape
-    np.testing.assert_allclose(k, expected, atol=atol)
-
-
-@pytest.mark.parametrize(
-    "basis_class, expected, atol",
-    [(QuadraticBasis, np.array([0.083, 0.33, 0.083]), 4e-3)],
-)
-def test_load_vector_first_derivative(basis_class, expected, atol):
-    y_n = np.array([0, 0.5])
-    f = load_vector(3, y_n, basis_class())
-    assert f.shape == expected.shape
-    np.testing.assert_allclose(f, expected, atol=atol)
-
-
-@pytest.mark.parametrize(
-    "basis_class, expected, atol",
-    [
-        (
-            LinearBasis,
-            np.array(
-                [
-                    [4, -4],
-                    [-4, 4],
-                ]
-            ),
-            1e-10,
-        )
-    ],
-)
-def test_stiffness_matrix_second_derivative(basis_class, expected, atol):
-    y_n = np.array([0, 0.25])
-    k = stiffness_matrix_second_derivative(3, y_n, basis_class())
-    assert k.shape == expected.shape
-    np.testing.assert_allclose(k, expected, atol=atol)
+    # Assertions
+    assert result.shape == expected.shape
+    np.testing.assert_allclose(result, expected, atol=atol)

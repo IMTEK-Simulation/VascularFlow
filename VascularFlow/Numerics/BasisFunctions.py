@@ -17,6 +17,7 @@ import numpy as np
 class BasisFunction:
 
     _nb_nodes = None
+    _dof_per_node = 1
 
     @property
     def nb_nodes(self):
@@ -24,6 +25,13 @@ class BasisFunction:
         Return the number of nodes in which the basis functions are being calculated (the degrees of freedom of each element).
         """
         return self._nb_nodes
+
+    @property
+    def dof_per_node(self):
+        """
+        Return the number of degrees of freedom of each element (used in the assembly matrix).
+        """
+        return self._dof_per_node
 
     def eval(self, x: np.array):
         """Return the basis functions in unit interval."""
@@ -142,6 +150,7 @@ class LinearBasis(BasisFunction):
     """
 
     _nb_nodes = 2
+    _dof_per_node = 1
 
     def eval(self, x: np.array):
         """
@@ -187,6 +196,7 @@ class QuadraticBasis(BasisFunction):
     """
 
     _nb_nodes = 3
+    _dof_per_node = 1
 
     def eval(self, x: np.array):
         """
@@ -252,6 +262,7 @@ class HermiteBasis(BasisFunction):
     """
 
     _nb_nodes = 4
+    _dof_per_node = 2
 
     def eval(self, x: np.array):
         """

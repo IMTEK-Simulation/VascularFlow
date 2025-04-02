@@ -1,6 +1,5 @@
 """
-Test the `pressure` function for the non-dimensionalized Navier–Stokes equations (conservation of momentum)
-in a channel with unit length.
+Test the `pressure` function under varying mesh sizes, time step sizes, and unit less parameters used in the pressure function.
 
 Since no analytical solution is available, this test ensures:
 - Output shape is consistent with input mesh.

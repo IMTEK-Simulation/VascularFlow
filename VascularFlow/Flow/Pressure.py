@@ -12,30 +12,31 @@ Basis function:
 - Linear basis function
 """
 
-
-
 import numpy as np
 from scipy.sparse.linalg import spsolve
 
 from VascularFlow.Numerics.Assembly import assemble_global_matrices
 from VascularFlow.Numerics.BasisFunctions import LinearBasis
-from VascularFlow.Numerics.ElementMatrices import stiffness_matrix_first_derivative, load_vector
+from VascularFlow.Numerics.ElementMatrices import (
+    stiffness_matrix_first_derivative,
+    load_vector,
+)
 from VascularFlow.Numerics.ArrayFirstDerivative import array_first_derivative
 
 
 def pressure(
-        mesh_nodes: np.ndarray,
-        time_step_size: float,
-        eps: float,
-        re: float,
-        st: float,
-        h_star: np.ndarray,
-        q_star: np.ndarray,
-        q_n: np.ndarray,
-        q_n_1: np.ndarray,
+    mesh_nodes: np.ndarray,
+    time_step_size: float,
+    eps: float,
+    re: float,
+    st: float,
+    h_star: np.ndarray,
+    q_star: np.ndarray,
+    q_n: np.ndarray,
+    q_n_1: np.ndarray,
 ):
     """
-    Calculate the pressure through a channel with length 1, using the finite element method.
+    Calculate the pressure at a given time step size through a channel with length 1, using the finite element method.
 
     Parameters
     ----------
@@ -61,7 +62,7 @@ def pressure(
     Returns
     ----------
     pressure : np.ndarray
-        Pressure through a channel
+        Pressure through the channel
 
     """
 
@@ -78,9 +79,18 @@ def pressure(
     )
 
     # create the right hand side terms (-ReSt/H ∂Q/∂t, 6/5 Re/H ∂/∂x(Q2/H), 12Q/H3)
-    first_term = -((eps * re * st) / h_star) * (3 * q_star - 4 * q_n + q_n_1) / (2 * time_step_size)
-    second_term = -1.2 * re * (1 / h_star) * array_first_derivative(q_star ** 2 / h_star, mesh_nodes)
-    third_term = -12 * q_star / (h_star ** 3)
+    first_term = (
+        -((eps * re * st) / h_star)
+        * (3 * q_star - 4 * q_n + q_n_1)
+        / (2 * time_step_size)
+    )
+    second_term = (
+        -1.2
+        * re
+        * (1 / h_star)
+        * array_first_derivative(q_star**2 / h_star, mesh_nodes)
+    )
+    third_term = -12 * q_star / (h_star**3)
 
     lhs = global_stiffness_matrix
     rhs = global_load_vector * (first_term + second_term + third_term)

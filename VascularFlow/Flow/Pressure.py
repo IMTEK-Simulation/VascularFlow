@@ -1,31 +1,96 @@
-import numpy as np
+"""
+1D numerical solution of the non-dimensionalized Navier–Stokes equations (conservation of momentum)
+to calculate the pressure through a channel with length 1, using the finite element method.
 
-from VascularFlow.Numerics.Assembly import assemble_system_matrix_1dof, assemble_force_matrix_pressure
+States:
+- transient (∂p/∂x = -ReSt/H ∂Q/∂t - 6/5 Re/H ∂/∂x(Q2/H) - 12Q/H3)
+
+Boundary conditions:
+- zero pressure at the outlet of the channel
+
+Basis function:
+- Linear basis function
+"""
+
+
+
+import numpy as np
+from scipy.sparse.linalg import spsolve
+
+from VascularFlow.Numerics.Assembly import assemble_global_matrices
 from VascularFlow.Numerics.BasisFunctions import LinearBasis
-from VascularFlow.Numerics.ElementMatrices import eval_first, force_matrix_pressure
+from VascularFlow.Numerics.ElementMatrices import stiffness_matrix_first_derivative, load_vector
 from VascularFlow.Numerics.ArrayFirstDerivative import array_first_derivative
 
 
-def pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1):
-    element_matrix_nn = eval_first(1, LinearBasis())
-    nb_nodes, _ = element_matrix_nn.shape
-    nb_elements = len(x_n) - 1
-    element_matrices_enn = element_matrix_nn.reshape((1, nb_nodes, nb_nodes)) * np.ones(nb_elements).reshape(
-        nb_elements, 1, 1)
-    system_matrix_gg = assemble_system_matrix_1dof(element_matrices_enn)
-    system_matrix_gg[-1] = 0
-    system_matrix_gg[-1, -1] = 1
+def pressure(
+        mesh_nodes: np.ndarray,
+        time_step_size: float,
+        eps: float,
+        re: float,
+        st: float,
+        h_star: np.ndarray,
+        q_star: np.ndarray,
+        q_n: np.ndarray,
+        q_n_1: np.ndarray,
+):
+    """
+    Calculate the pressure through a channel with length 1, using the finite element method.
 
-    first_term = -((eps * re * st) / Hstar) * (3 * Qstar - 4 * Q_n + Q_n1) / (2 * dt)
-    second_term = 1.2 * re * (1 / Hstar) * array_first_derivative(Qstar**2/Hstar, dx_e)
-    third_term = -12 * Qstar / (Hstar ** 3)
+    Parameters
+    ----------
+    mesh_nodes : np.ndarray
+        Global mesh node positions along the channel.
+    time_step_size : float
+        Time step size.
+    eps : float
+        Channel’s aspect ratio (channel height/channel length).
+    re : float
+        Reynolds number.
+    st : float
+        Strouhal number.
+    h_star : np.ndarray
+        Channel height in sub time step.
+    q_star : np.ndarray
+        channel area flow rate in sub time step.
+    q_n : np.ndarray
+        channel area flow rate in current time step.
+    q_n_1 : np.ndarray
+        channel area flow rate in previous time step.
 
-    rhs1 = force_matrix_pressure(dx_e)
-    rhs2 = rhs1.reshape((1, 1, 2)) * np.ones(nb_elements).reshape(nb_elements, 1, 1)
-    system_matrix_ll = assemble_force_matrix_pressure(rhs2) * (first_term + second_term + third_term)
+    Returns
+    ----------
+    pressure : np.ndarray
+        Pressure through a channel
 
-    system_matrix_ll[-1] = 0
+    """
 
-    p = np.linalg.solve(system_matrix_gg, system_matrix_ll)
+    basis_function = LinearBasis()
+    element_stiffness_matrix = stiffness_matrix_first_derivative
+    element_load_vector = load_vector
 
-    return p
+    global_stiffness_matrix, global_load_vector = assemble_global_matrices(
+        mesh_nodes,
+        basis_function,
+        element_stiffness_matrix,
+        element_load_vector,
+        3,
+    )
+
+    # create the right hand side terms (-ReSt/H ∂Q/∂t, 6/5 Re/H ∂/∂x(Q2/H), 12Q/H3)
+    first_term = -((eps * re * st) / h_star) * (3 * q_star - 4 * q_n + q_n_1) / (2 * time_step_size)
+    second_term = -1.2 * re * (1 / h_star) * array_first_derivative(q_star ** 2 / h_star, mesh_nodes)
+    third_term = -12 * q_star / (h_star ** 3)
+
+    lhs = global_stiffness_matrix
+    rhs = global_load_vector * (first_term + second_term + third_term)
+
+    # Add boundary condition (zero pressure at the outlet of the channel)
+    lhs[-1] = 0
+    lhs[-1, -1] = 1
+    rhs[-1] = 0
+
+    # Solve system
+    channel_pressure = spsolve(lhs, rhs)
+
+    return channel_pressure

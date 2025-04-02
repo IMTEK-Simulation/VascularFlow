@@ -1,26 +1,58 @@
+"""
+Test the `pressure` function for the non-dimensionalized Navier–Stokes equations (conservation of momentum)
+in a channel with unit length.
+
+Since no analytical solution is available, this test ensures:
+- Output shape is consistent with input mesh.
+- Output contains no NaNs or infinities.
+"""
+
 import numpy as np
+import pytest
 from VascularFlow.Flow.Pressure import pressure
 
-def test_pressure(plot=True):
+
+@pytest.mark.parametrize(
+    "nb_nodes, time_step_size, eps, re, st",
+    [
+        (11, 0.01, 0.02, 7.5, 0.68),
+        (51, 0.005, 0.01, 10, 0.5),
+        (101, 0.0025, 0.02, 7.5, 0.68),
+    ],
+)
+def test_pressure(nb_nodes, time_step_size, eps, re, st, plot=True):
     left = 0
     right = 1
-    x_n = np.linspace(left, right, 11)
-    dx_e = (right - left) / (len(x_n) - 1)
-    dt = 2.5e-3
-    eps = 0.02
-    re = 7.5
-    st = 0.68
-    Hstar = np.ones(len(x_n))
-    Qstar = np.ones(len(x_n))
-    Q_n = np.ones(len(x_n))
-    Q_n1 = np.ones(len(x_n))
+    mesh_nodes = np.linspace(left, right, nb_nodes)
+    h_star = np.ones(len(mesh_nodes))
+    q_star = np.ones(len(mesh_nodes))
+    q_n = np.ones(len(mesh_nodes))
+    q_n1 = np.ones(len(mesh_nodes))
 
-    pp = pressure(x_n, dx_e, dt, eps, re, st, Hstar, Qstar, Q_n, Q_n1)
-    print(pp.shape)
-    print(pp)
+    channel_pressure = pressure(
+        mesh_nodes,
+        time_step_size,
+        eps,
+        re,
+        st,
+        h_star,
+        q_star,
+        q_n,
+        q_n1,
+    )
+
+    # 1. Assert shape is correct
+    assert channel_pressure.shape == (nb_nodes,)
+    # 2. Assert no NaNs or infs
+    assert np.all(np.isfinite(channel_pressure))
+
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(x_n, pp, label="Pressure")
+
+        plt.plot(mesh_nodes, channel_pressure, label=f"n={nb_nodes}")
         plt.xlabel("x")
         plt.ylabel("pressure")
+        plt.title("Computed Channel Pressure")
+        plt.grid(True)
+        plt.legend()
         plt.show()

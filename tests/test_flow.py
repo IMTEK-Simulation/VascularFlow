@@ -1,89 +1,52 @@
+"""
+Test the `flow_rate` function under varying mesh sizes and sinusoidal channel height distributions.
+
+Since no analytical solution is available, this test ensures:
+- Output shape is consistent with input mesh.
+- Output contains no NaNs or infinities.
+"""
+
 import numpy as np
-
-from VascularFlow.Flow.Pressure import pressure
-from VascularFlow.Elasticity.Beam import euler_bernoulli_transient
+import pytest
 from VascularFlow.Flow.Flow import flow_rate
-from VascularFlow.Initialization.InitializeConstants import initialize_constants
-from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arrays
 
 
-def test_flow(plot=True):
+@pytest.mark.parametrize(
+    "nb_nodes, time_step_size, h_star",
+    [
+        (11, 0.01, 0.0001 * np.sin(np.pi * np.linspace(0, 1, 11)) + 1),
+        (21, 0.005, 0.00002 * np.sin(np.pi * np.linspace(0, 1, 21)) + 1),
+        (51, 0.0025, 0.00003 * np.sin(np.pi * np.linspace(0, 1, 51)) + 1),
+    ],
+)
+def test_flow_rate(nb_nodes, time_step_size, h_star, plot=True):
     left = 0
     right = 1
-    nb_nodes = 101
-    x_n = np.linspace(left, right, 101)
-    dx_e = (right - left) / (len(x_n) - 1)
-    dt = 2.5e-3
-    num_steps = 1
-    # Initialize constants
-    constants = initialize_constants()
-    channel_aspect_ratio = constants["epsilon"]
-    reynolds_number = constants["Re"]
-    strouhal_number = constants["St"]
-    fsi_parameter = constants["Beta"]
-    relaxation_factor = constants["relax"]
-    inlet_flow_rate = constants["q0"]
+    mesh_nodes = np.linspace(left, right, nb_nodes)
+    st = 0.68
+    inlet_flow_rate = 1
 
-    # Initialize flow arrays
-    flow_arrays = initialize_flow_arrays(nb_nodes)
-    h_star = flow_arrays["h_star"]
-    q_star = flow_arrays["q_star"]
-    q_n = flow_arrays["q_n"]
-    q_n1 = flow_arrays["q_n_1"]
+    h_n = np.ones(nb_nodes)
+    h_n1 = np.ones(nb_nodes)
 
-    # pressure calculation
-    pp = pressure(
-        x_n,
-        dx_e,
-        dt,
-        channel_aspect_ratio,
-        reynolds_number,
-        strouhal_number,
-        h_star,
-        q_star,
-        q_n,
-        q_n1,
-    )
-    # pp_interleaved = np.zeros(len(pp) * 2)
-    # pp_interleaved[::2] = pp
-
-    # Initialize flow arrays
-    h_new = flow_arrays["h_new"]
-    # h_new = np.concatenate([h_new, h_new])
-
-    # channel height calculation
-    channel_height = euler_bernoulli_transient(
-        x_n,
-        dx_e,
-        num_steps,
-        dt,
-        pp,
-        fsi_parameter,
-        relaxation_factor,
-        h_new,
+    channel_flow_rate = flow_rate(
+        mesh_nodes, time_step_size, st, inlet_flow_rate, h_star, h_n, h_n1
     )
 
-    # Initialize flow arrays
-    h_n = flow_arrays["h_n"]
-    h_n_1 = flow_arrays["h_n_1"]
+    # 1. Assert shape is correct
+    assert channel_flow_rate.shape == (nb_nodes,)
+    # 2. Assert no NaNs or infs
+    assert np.all(np.isfinite(channel_flow_rate))
 
-    # flow rate calculation
-    qq = flow_rate(
-        x_n, dx_e, dt, strouhal_number, inlet_flow_rate, channel_height, h_n, h_n_1
-    )
     if plot:
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(3, 1)
-        ax[0].plot(x_n, pp)
-        ax[1].plot(x_n, channel_height)
-        ax[2].plot(x_n, qq)
-
-        ax[0].set_xlabel("x")
-        ax[0].set_ylabel("pressure")
-        ax[1].set_xlabel("x")
-        ax[1].set_ylabel("height")
-        ax[2].set_xlabel("x")
-        ax[2].set_ylabel("flow rate")
-        plt.tight_layout()
+        plt.plot(
+            mesh_nodes, channel_flow_rate, label=f"St={st}, Inlet={inlet_flow_rate}"
+        )
+        plt.xlabel("x")
+        plt.ylabel("Area Flow Rate")
+        plt.grid(True)
+        plt.title("Computed Area Flow Rate")
+        plt.legend()
         plt.show()

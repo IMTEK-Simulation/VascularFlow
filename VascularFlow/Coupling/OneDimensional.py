@@ -114,6 +114,11 @@ def two_way_coupled_fsi(
     residual_values = []
     iteration_indices = []
     global_inner_counter = 0
+
+    # Store required variables at each time step for making animations
+    h_history = []
+    q_history = []
+    p_history = []
     while time < end_time:
         time += time_step_size
         outer_iteration_number += 1
@@ -150,7 +155,6 @@ def two_way_coupled_fsi(
             q_new = q_star
 
             inner_iteration_number += 1
-            print(inner_iteration_number)
         print(
             f"Time: {time:.5f}, Inner Iteration: {inner_iteration_number}, Inner Residual: {inner_residual:.5e}",
             flush=True,
@@ -161,4 +165,13 @@ def two_way_coupled_fsi(
         q_n_1 = q_n
         q_n = q_new
 
+        # Store results for animation
+        h_history.append(h_n.copy())
+        q_history.append(q_n.copy())
+        p_history.append(p.copy())
+
+    # Save to files for later visualization
+    np.savetxt("h_history.txt", np.array(h_history))
+    np.savetxt("q_history.txt", np.array(q_history))
+    np.savetxt("p_history.txt", np.array(p_history))
     return h_n, q_n, p, residual_values, iteration_indices

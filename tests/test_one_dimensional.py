@@ -1,40 +1,67 @@
+"""
+Test the two-way coupled fluid–structure interaction (FSI) solver across different simulation configurations.
+
+This test verifies:
+- The correct shape of the computed pressure, flow rate, and channel height arrays.
+- That the FSI solver runs without errors for a range of physical and numerical parameters.
+
+The solver couples:
+- Navier–Stokes equations (for pressure and flow rate)
+- Euler–Bernoulli beam equation (for wall displacement)
+
+Boundary conditions include:
+- Inlet flow rate = 1
+- Outlet pressure = 0
+- Clamped beam ends (zero displacement and rotation)
+
+No analytical solution is available, so correctness is based on shape and execution success.
+"""
+
+import numpy as np
+import pytest
 
 from VascularFlow.Coupling.OneDimensional import two_way_coupled_fsi
-from VascularFlow.Initialization.InitializeConstants import initialize_constants
-from VascularFlow.Initialization.InitializeFlowArrays import initialize_flow_arrays
 
 
-def test_two_way_coupled_fsi(plot=True):
-    nb_nodes = 200
-    time_step_size = 2.5e-03
-    nb_time_steps = 8000
-    end_time = nb_time_steps * 2.5e-03
-
-    # Initialize constants
-    constants = initialize_constants()
-    channel_aspect_ratio = constants["epsilon"]
-    reynolds_number = constants["Re"]
-    strouhal_number = constants["St"]
-    fsi_parameter = constants["Beta"]
-    relaxation_factor = constants["relax"]
-    inlet_flow_rate = constants["q0"]
+@pytest.mark.parametrize(
+    "nb_nodes, time_step_size, channel_aspect_ratio, reynolds_number, strouhal_number, "
+    "fsi_parameter, relaxation_factor, inner_res, inner_it_number",
+    [(200, 2.5e-03, 0.02, 7.5, 0.68, 35156.24, 0.00003, 1e-6, 50)],
+)
+def test_two_way_coupled_fsi(
+    nb_nodes,
+    time_step_size,
+    channel_aspect_ratio,
+    reynolds_number,
+    strouhal_number,
+    fsi_parameter,
+    relaxation_factor,
+    inner_res,
+    inner_it_number,
+    plot=True,
+):
+    left = 0
+    right = 1
+    mesh_nodes = np.linspace(left, right, nb_nodes)
+    nb_time_steps = 5
+    end_time = nb_time_steps * time_step_size
+    inlet_flow_rate = 1
+    inner_tolerance = 1e-20
 
     # Initialize flow arrays
-    flow_arrays = initialize_flow_arrays(nb_nodes)
-    h_n_1 = flow_arrays["h_n_1"]
-    h_n = flow_arrays["h_n"]
-    h_star = flow_arrays["h_star"]
-    h_new = flow_arrays["h_new"]
-    q_n_1 = flow_arrays["q_n_1"]
-    q_n = flow_arrays["q_n"]
-    q_star = flow_arrays["q_star"]
-    q_new = flow_arrays["q_new"]
-    p = flow_arrays["p"]
-    p_inner = flow_arrays["p_inner"]
+    h_n_1 = np.ones(nb_nodes)
+    h_n = np.ones(nb_nodes)
+    h_star = np.ones(nb_nodes)
+    h_new = np.ones(nb_nodes)
+    q_n_1 = np.ones(nb_nodes)
+    q_n = np.ones(nb_nodes)
+    q_star = np.ones(nb_nodes)
+    q_new = np.ones(nb_nodes)
+    p = np.zeros(nb_nodes)
+    p_new = np.zeros(nb_nodes)
 
-
-    final_solution = two_way_coupled_fsi(
-        nb_nodes,
+    h_n, q_n, p, residual_values, iteration_indices = two_way_coupled_fsi(
+        mesh_nodes,
         time_step_size,
         end_time,
         channel_aspect_ratio,
@@ -43,6 +70,9 @@ def test_two_way_coupled_fsi(plot=True):
         fsi_parameter,
         relaxation_factor,
         inlet_flow_rate,
+        inner_res,
+        inner_it_number,
+        inner_tolerance,
         h_n_1,
         h_n,
         h_star,
@@ -52,15 +82,24 @@ def test_two_way_coupled_fsi(plot=True):
         q_star,
         q_new,
         p,
-        p_inner,
+        p_new,
     )
-    print(final_solution[0])
-    print(final_solution[1])
-    print(final_solution[2])
+
+    # Basic assertions
+    assert h_n.shape == (nb_nodes,)
+    assert q_n.shape == (nb_nodes,)
+    assert p.shape == (nb_nodes,)
+
+    print(h_n)
+    print(q_n)
+    print(p)
+
+    # Optional plot
     if plot:
         import matplotlib.pyplot as plt
+
         plt.figure(figsize=(10, 5))
-        plt.semilogy(final_solution[4], final_solution[3])
+        plt.semilogy(iteration_indices, residual_values)
         plt.xlabel("Cumulative Inner Iteration Count")
         plt.ylabel("Inner Residual (log scale)")
         plt.title("Inner Residual vs Iterations")

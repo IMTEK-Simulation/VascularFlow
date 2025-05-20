@@ -13,10 +13,12 @@ Basis function types:
 import numpy as np
 from numpy import ndarray
 
+from VascularFlow.Numerics.BasisFunctions import BasisFunction
+
 
 def assemble_global_matrices(
     mesh_nodes: ndarray,
-    basis_function,
+    basis_function: BasisFunction,
     element_matrix_function: callable,
     element_vector_function: callable,
     nb_quadrature_points: int = 3,

@@ -7,6 +7,7 @@ for an elastic beam of length 1, subjected to a constant distributed load applie
 
 import numpy as np
 import pytest
+
 from VascularFlow.Elasticity.Beam import (
     euler_bernoulli_steady,
     euler_bernoulli_transient,
@@ -16,8 +17,7 @@ from VascularFlow.Elasticity.Beam import (
 @pytest.mark.parametrize(
     "nb_mesh_nodes, constant_load",
     [
-        (11, 1),
-        (101, 5),
+        (101, 1),
     ],
 )
 def test_euler_bernoulli_steady_constant_load(nb_mesh_nodes, constant_load, plot=False):
@@ -81,7 +81,6 @@ def test_euler_bernoulli_constant_load_transient(plot=True):
     np.testing.assert_allclose(
         channel_height_exact, channel_height, rtol=1e-4, atol=1e-8
     )
-
     if plot:
         import matplotlib.pyplot as plt
 

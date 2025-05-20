@@ -153,6 +153,11 @@ def two_dimensional_steady_fsi_dual_channel(
     # Initialize residual and iteration count
     residual = 1
     iteration = 0
+
+    # Store required variables at each iteration for making residual vs iteration number plot
+    residual_values = []
+    iteration_indices = []
+
     # Begin fixed-point FSI iteration loop
     while residual > residual_number and iteration < iteration_number:
 
@@ -190,14 +195,27 @@ def two_dimensional_steady_fsi_dual_channel(
         w_star = (
             under_relaxation_factor * w_star + (1 - under_relaxation_factor) * w_new
         )
-        print("max wall displacement is :", max(w_star))
+
 
         # --- Step 4: Update fluid meshes using harmonic extension ---
+        channel1_domain = dolfinx.mesh.create_rectangle(
+            MPI.COMM_WORLD,
+            np.array([[0, 0], [fluid_solid_domain_length, fluid_domain_height]]),
+            [nb_mesh_nodes_x, nb_mesh_nodes_y],
+            cell_type=dolfinx.mesh.CellType.triangle,
+        )
         channel1_domain_star = mesh_deformation(
             -np.array(w_star), # Negative displacement for channel 1
             50,
             channel1_domain,
             harmonic_extension=True,
+        )
+
+        channel2_domain = dolfinx.mesh.create_rectangle(
+            MPI.COMM_WORLD,
+            np.array([[0, 0], [fluid_solid_domain_length, fluid_domain_height]]),
+            [nb_mesh_nodes_x, nb_mesh_nodes_y],
+            cell_type=dolfinx.mesh.CellType.triangle,
         )
         channel2_domain_star = mesh_deformation(
             np.array(w_star), # Positive displacement for channel 2
@@ -250,10 +268,7 @@ def two_dimensional_steady_fsi_dual_channel(
         # Combine pressure and mesh residuals
         residual_channel1 = max(residual_h_channel1, residual_p_channel1)
         residual_channel2 = max(residual_h_channel2, residual_p_channel2)
-        # print("max res value in channel1 is :", residual_channel1)
-        # print("max res value in channel2 is :", residual_channel2)
         residual = max(residual_channel1, residual_channel2)
-        # print("fsi res number is :", residual)
 
         # --- Step 6: Update state for next iteration ---
         p_new_1 = p1
@@ -263,6 +278,9 @@ def two_dimensional_steady_fsi_dual_channel(
         channel2_domain = channel2_domain_star
 
         iteration += 1
-        # print("fsi ite number is :", iteration)
+
+        residual_values.append(residual)
+        iteration_indices.append(iteration)
+
     # Final return of converged pressure fields, wall shape, and deformed domains
-    return p_new_1, p_new_2, w_new, channel1_domain, channel2_domain
+    return p_new_1, p_new_2, w_new, channel1_domain, channel2_domain, residual_values, iteration_indices

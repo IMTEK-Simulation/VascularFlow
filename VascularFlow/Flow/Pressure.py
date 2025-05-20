@@ -3,6 +3,7 @@
 to calculate the pressure through a channel with length 1, using the finite element method.
 
 States:
+- steady (∂p/∂x = - 6/5 Re/H ∂/∂x(1/H) - 12/H3)
 - transient (∂p/∂x = -ReSt/H ∂Q/∂t - 6/5 Re/H ∂/∂x(Q2/H) - 12Q/H3)
 
 Boundary conditions:
@@ -104,3 +105,38 @@ def pressure(
     channel_pressure = spsolve(lhs, rhs)
 
     return channel_pressure
+
+
+def pressure_steady_state(
+    mesh_nodes: np.ndarray,
+    eps: float,
+    re: float,
+    h_star: np.ndarray,
+):
+    """
+    Calculate the steady state pressure through a channel with length 1, using the finite element method.
+    """
+    basis_function = LinearBasis()
+    element_stiffness_matrix = stiffness_matrix_first_derivative
+    element_load_vector = load_vector
+    global_stiffness_matrix, global_load_vector = assemble_global_matrices(
+        mesh_nodes, basis_function, element_stiffness_matrix, element_load_vector, 3
+    )
+    # create the right hand side terms (6/5 Re/H ∂/∂x(1/H), 12/H3)
+    first_term = (
+        -1.2 * eps * re * (1 / h_star) * array_first_derivative(1 / h_star, mesh_nodes)
+    )
+    second_term = -12 / (h_star**3)
+
+    lhs = global_stiffness_matrix
+    rhs = global_load_vector * (first_term + second_term)
+
+    # Add boundary condition (zero pressure at the outlet of the channel)
+    lhs[-1] = 0
+    lhs[-1, -1] = 1
+    rhs[-1] = 0
+
+    # Solve system
+    channel_pressure_steady_state = spsolve(lhs, rhs)
+
+    return channel_pressure_steady_state

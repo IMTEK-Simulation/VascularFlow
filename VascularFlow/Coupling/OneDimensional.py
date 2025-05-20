@@ -14,7 +14,7 @@ Boundary conditions:
 Numerical scheme:
 - Finite element method
 """
-
+import matplotlib.pyplot as plt
 import numpy as np
 
 from VascularFlow.Coupling.FSIInnerLoop import inner_fsi_iteration
@@ -154,11 +154,21 @@ def two_way_coupled_fsi(
             h_new = h_star
             q_new = q_star
 
+
             inner_iteration_number += 1
+        #print(
+            #f"Time: {time:.5f}, Inner Iteration: {inner_iteration_number}, Inner Residual: {inner_residual:.5e}",
+            #flush=True,
+        #)
+
+        ##########Residuals##########
+        res1 = np.linalg.norm(abs(h_new - h_n)) / np.sqrt(np.size(h_new))
+        res2 = np.max(abs(h_new - h_n))
         print(
-            f"Time: {time:.5f}, Inner Iteration: {inner_iteration_number}, Inner Residual: {inner_residual:.5e}",
+            f"Time: {time:.5f}, Residual1: {res1}, Residual2: {res2:.5e}",
             flush=True,
         )
+
 
         h_n_1 = h_n
         h_n = h_new

@@ -54,6 +54,7 @@ def test_inner_fsi_iteration(
         q_star,
         p_new,
     )
+
     assert h_star.shape == (nb_nodes,)
     assert q_star.shape == (nb_nodes,)
     assert p.shape == (nb_nodes,)

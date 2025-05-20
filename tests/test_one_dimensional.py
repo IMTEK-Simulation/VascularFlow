@@ -26,7 +26,7 @@ from VascularFlow.Coupling.OneDimensional import two_way_coupled_fsi
 @pytest.mark.parametrize(
     "nb_nodes, time_step_size, channel_aspect_ratio, reynolds_number, strouhal_number, "
     "fsi_parameter, relaxation_factor, inner_res, inner_it_number",
-    [(101, 1e-03, 0.02, 7.5, 0.68, 35156.24, 0.001, 1e-4, 2000)],
+    [(200, 2.5e-03, 0.02, 7.5, 0.68, 35156.24, 0.00003, 1e-6, 100)],
 )
 def test_two_way_coupled_fsi(
     nb_nodes,
@@ -43,7 +43,7 @@ def test_two_way_coupled_fsi(
     left = 0
     right = 1
     mesh_nodes = np.linspace(left, right, nb_nodes)
-    nb_time_steps = 10
+    nb_time_steps = 8000
     end_time = nb_time_steps * time_step_size
     inlet_flow_rate = 1
     inner_tolerance = 1e-16
@@ -93,7 +93,6 @@ def test_two_way_coupled_fsi(
     print(h_n)
     print(q_n)
     print(p)
-
     # Optional plot
     if plot:
         import matplotlib.pyplot as plt

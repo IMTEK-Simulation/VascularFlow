@@ -19,6 +19,7 @@ import dolfinx
 import numpy as np
 from mpi4py import MPI
 
+
 from VascularFlow.FEniCSx.FluidFlow.Pressure2DPressureInlet import (
     pressure_2d_pressure_inlet,
 )
@@ -128,6 +129,11 @@ def steady_state_fsi_single_channel(
     # Initialize residual and iteration counter
     residual = 1
     iteration = 0
+
+    # Store required variables at each iteration for making residual vs iteration number plot
+    residual_values = []
+    iteration_indices = []
+
     # Begin fixed-point iteration loop for FSI coupling
     while residual > residual_number and iteration < iteration_number:
         # ----------------------------------------
@@ -141,7 +147,6 @@ def steady_state_fsi_single_channel(
             inlet_pressure,
             navier_stokes=False, # Set to True to include convection
         )
-
         # ----------------------------------------
         # Step 2: Solve the solid mechanics problem (Euler–Bernoulli beam)
         # ----------------------------------------
@@ -158,17 +163,29 @@ def steady_state_fsi_single_channel(
         w_star = (
             under_relaxation_factor * w_star + (1 - under_relaxation_factor) * w_new
         )
-
         # ----------------------------------------
         # Step 3: Apply mesh deformation to fluid domain based on wall motion
         # ----------------------------------------
+        fluid_domain = dolfinx.mesh.create_rectangle(
+            MPI.COMM_WORLD,
+            np.array(
+                [
+                    [
+                        fluid_solid_domain_inlet_coordinate,
+                        fluid_solid_domain_inlet_coordinate,
+                    ],
+                    [fluid_solid_domain_outlet_coordinate, fluid_domain_height],
+                ]
+            ),
+            [nb_mesh_nodes_x, nb_mesh_nodes_y],
+            cell_type=dolfinx.mesh.CellType.triangle,
+        )
         fluid_domain_star = mesh_deformation(
             w_star,
             fluid_solid_domain_outlet_coordinate,
             fluid_domain,
             harmonic_extension=True,
         )
-
         # ----------------------------------------
         # Step 4: Compute convergence residuals
         # ----------------------------------------
@@ -180,7 +197,7 @@ def steady_state_fsi_single_channel(
         residual_p = np.max(np.abs(p - p_new)) / np.max(np.abs(p_new))
         # Take the worst-case residual
         residual = max(residual_h, residual_p)
-        print(residual)
+        #print("max residual is :", residual)
         # ----------------------------------------
         # Step 5: Update variables for next iteration
         # ----------------------------------------
@@ -189,6 +206,10 @@ def steady_state_fsi_single_channel(
         fluid_domain = fluid_domain_star
 
         iteration += 1
-        print("iteration number is :", iteration)
+        #print("iteration number is :", iteration)
+
+        residual_values.append(residual)
+        iteration_indices.append(iteration)
+
     # Return the final pressure, wall displacement, and deformed fluid mesh
-    return p_new, w_new, fluid_domain
+    return p_new, w_new, fluid_domain, residual_values, iteration_indices

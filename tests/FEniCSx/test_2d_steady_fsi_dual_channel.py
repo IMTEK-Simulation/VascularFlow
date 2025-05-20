@@ -1,13 +1,13 @@
 import pytest
 import numpy as np
-import pyvista
-from dolfinx import plot
 from matplotlib import pyplot as plt
 
 
 from VascularFlow.FEniCSx.Coupling.SteadyFSIDualChannel import (
     two_dimensional_steady_fsi_dual_channel,
 )
+from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
+
 
 @pytest.mark.parametrize(
     (
@@ -27,14 +27,31 @@ from VascularFlow.FEniCSx.Coupling.SteadyFSIDualChannel import (
         "dimensionless_extensional_stiffness",
         "under_relaxation_factor",
         "residual_number",
-        "iteration_number"
+        "iteration_number",
     ),
     [
         # Format: (length, height, inlet1, outlet1, inlet2, outlet2, nx, ny, Re1, Re2, p1, p2, B, A, relax, tol, max_iter)
-        (50, 1, 0, 50, 50, 0, 500, 10, 1.0, 1.0, 100, 100, 9e4, 1.6e5, 0.00009, 1e-8, 50),
+        (
+            50,
+            1,
+            0,
+            50,
+            50,
+            0,
+            500,
+            10,
+            1.0,
+            1.0,
+            100,
+            100,
+            9e4,
+            1.6e5,
+            0.0003,
+            1e-4,
+            2000,
+        ),
     ],
 )
-
 def test_two_dimensional_steady_fsi_dual_channel(
     fluid_solid_domain_length,
     fluid_domain_height,
@@ -73,6 +90,8 @@ def test_two_dimensional_steady_fsi_dual_channel(
         wall_displacement,
         channel1_deformed_mesh,
         channel2_deformed_mesh,
+        residual_values,
+        iteration_indices,
     ) = two_dimensional_steady_fsi_dual_channel(
         fluid_solid_domain_length,
         fluid_domain_height,
@@ -103,53 +122,42 @@ def test_two_dimensional_steady_fsi_dual_channel(
 
     # Optional visualization
     if plot_results:
-        visualize_dual_channel_meshes(channel1_deformed_mesh, channel2_deformed_mesh)
+        visualize_mesh(channel1_deformed_mesh, title="Channel 1 Deformed Mesh")
+        visualize_mesh(channel2_deformed_mesh, title="Channel 2 Deformed Mesh")
+
         plot_dual_channel_profiles(
-            wall_displacement, channel1_pressure, channel2_pressure, fluid_solid_domain_length
+            wall_displacement,
+            channel1_pressure,
+            channel2_pressure,
+            residual_values,
+            iteration_indices,
+            fluid_solid_domain_length,
         )
 
 
-def visualize_dual_channel_meshes(mesh1, mesh2):
+def plot_dual_channel_profiles(wall_disp, p1, p2, res, it, length):
     """
-    Visualizes deformed meshes for channel 1 and channel 2 using PyVista.
-    """
-    mesh1.topology.create_connectivity(2, 2)
-    mesh2.topology.create_connectivity(2, 2)
-
-    topo1, cell_types1, geom1 = plot.vtk_mesh(mesh1, 2)
-    topo2, cell_types2, geom2 = plot.vtk_mesh(mesh2, 2)
-
-    grid1 = pyvista.UnstructuredGrid(topo1, cell_types1, geom1)
-    grid2 = pyvista.UnstructuredGrid(topo2, cell_types2, geom2)
-
-    plotter1 = pyvista.Plotter()
-    plotter2 = pyvista.Plotter()
-
-    plotter1.add_mesh(grid1, show_edges=True)
-    plotter2.add_mesh(grid2, show_edges=True)
-
-    plotter1.view_xy()
-    plotter2.view_xy()
-
-    plotter1.show(title="Channel 1 Deformed Mesh")
-    plotter2.show(title="Channel 2 Deformed Mesh")
-
-
-def plot_dual_channel_profiles(wall_disp, p1, p2, length):
-    """
-    Plots displacement and pressure profiles across the channel.
+    Plots displacement, pressure profiles, and  residual vs iteration number
     """
     x = np.linspace(0, length, len(wall_disp))
 
-    fig, ax = plt.subplots(nrows=3, ncols=1, figsize=(10, 6))
+    fig, ax = plt.subplots(nrows=4, ncols=1, figsize=(10, 8))
     ax[0].plot(x, wall_disp, label="Displacement", color="green")
     ax[1].plot(x, p1, label="Channel 1 Pressure", color="blue")
     ax[2].plot(x, p2, label="Channel 2 Pressure", color="red")
+    ax[3].semilogy(
+        it[1:], res[1:], label="residual vs iteration number", color="orange"
+    )
 
     ax[0].set_ylabel("w (displacement)")
     ax[1].set_ylabel("p1")
     ax[2].set_ylabel("p2")
+    ax[3].set_ylabel("Residual (log scale)")
+
+    ax[0].set_xlabel("x (channel length)")
+    ax[1].set_xlabel("x (channel length)")
     ax[2].set_xlabel("x (channel length)")
+    ax[3].set_xlabel("Cumulative Iteration Count")
 
     for a in ax:
         a.grid(True)

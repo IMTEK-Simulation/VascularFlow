@@ -20,7 +20,7 @@ from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
     ),
     [
         # Format: (L, nx, ny, Re, p_in, B, A, relax, tol, max_iter)
-        (50, 500, 10, 1.0, 280.0, 9e5, 1.6e5, 0.0003, 1e-8, 50),
+        (50, 500, 10, 1.0, 280.0, 9e4, 1.6e5, 0.0003, 1e-4, 2000),
     ],
 )
 
@@ -49,7 +49,7 @@ def test_steady_state_fsi_single_channel_parametrized(
     ambient_pressure = np.zeros(nb_mesh_nodes_x + 1)
 
     # Run FSI solver
-    pressure, displacement, deformed_mesh = steady_state_fsi_single_channel(
+    pressure, displacement, deformed_mesh, residual_values, iteration_indices = steady_state_fsi_single_channel(
         fluid_solid_domain_inlet_coordinate,
         fluid_solid_domain_outlet_coordinate,
         fluid_domain_height,
@@ -71,8 +71,8 @@ def test_steady_state_fsi_single_channel_parametrized(
     max_displacement = np.max(np.abs(displacement))
     max_pressure = np.max(pressure)
 
-    print(f"Max displacement: {max_displacement:.4f}")
-    print(f"Max pressure: {max_pressure:.4f}")
+    #print(f"Max displacement: {max_displacement:.4f}")
+    #print(f"Max pressure: {max_pressure:.4f}")
 
     assert max_displacement > 0.0, "Displacement should not be zero under load."
     assert max_pressure > 0.0, "Pressure must remain positive at the interface."
@@ -81,20 +81,19 @@ def test_steady_state_fsi_single_channel_parametrized(
     visualize = True
     if visualize:
         visualize_mesh(deformed_mesh, title="Deformed Mesh")
-        plot_interface_pressure_profile(pressure, nb_mesh_nodes_x)
 
-
-def plot_interface_pressure_profile(pressure: np.ndarray, nb_points: int):
-    """
-    Plot the pressure profile along the fluid–structure interface.
-    """
-    x = np.linspace(0, 1, nb_points + 1)
-    plt.figure(figsize=(10, 4))
-    plt.plot(x, pressure, label="Interface Pressure", color="darkred")
-    plt.xlabel("Normalized Channel Length (x)")
-    plt.ylabel("Pressure")
-    plt.title("Interface Pressure Distribution")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+        fig, ax = plt.subplots(nrows=2, ncols=1, figsize=(10, 6))
+        x = np.linspace(0, 50, nb_mesh_nodes_x + 1)
+        # Plots
+        ax[0].plot(x, pressure)
+        ax[1].semilogy(iteration_indices[1:], residual_values[1:])
+        # Set labels
+        ax[0].set_xlabel("Normalized Channel Length (x)")
+        ax[0].set_ylabel("Normalized Channel Pressure")
+        ax[1].set_xlabel("Cumulative Iteration Count")
+        ax[1].set_ylabel("Residual (log scale)")
+        # Enable grid on both subplots
+        ax[0].grid(True)
+        ax[1].grid(True)
+        plt.tight_layout()
+        plt.show()

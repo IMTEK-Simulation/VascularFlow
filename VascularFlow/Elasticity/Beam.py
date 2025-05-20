@@ -16,6 +16,8 @@ Basis function:
 import numpy as np
 from scipy.sparse.linalg import spsolve
 
+
+
 from VascularFlow.Numerics.Assembly import assemble_global_matrices
 from VascularFlow.Numerics.BasisFunctions import HermiteBasis
 from VascularFlow.Numerics.ElementMatrices import (
@@ -60,8 +62,11 @@ def euler_bernoulli_steady(
         3,
     )
 
+    q_interleaved = np.zeros(len(q) * 2)
+    q_interleaved[::2] = q
+
     lhs = global_stiffness_matrix
-    rhs = global_load_vector * q
+    rhs = global_load_vector * q_interleaved
 
     # Add boundary conditions
     lhs_bc, rhs_bc = clamped_boundary_condition(lhs.copy(), rhs.copy())
@@ -69,7 +74,7 @@ def euler_bernoulli_steady(
     # Solve system
     solution = spsolve(lhs_bc, rhs_bc)
     displacement = solution[::2]
-    rotation = solution[1::2]
+    # rotation = solution[1::2]
     return displacement
 
 

@@ -96,4 +96,5 @@ def test_steady_state_fsi_single_channel_parametrized(
         ax[0].grid(True)
         ax[1].grid(True)
         plt.tight_layout()
+        plt.savefig("single channel.png")
         plt.show()

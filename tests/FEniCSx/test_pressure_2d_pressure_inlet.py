@@ -23,8 +23,8 @@ from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import mesh_deform
             ),
             0,  # Inlet x-coordinate
             50,  # Outlet x-coordinate
-            1,  # Reynolds number (used in Navier–Stokes equations)
-            280,  # Inlet pressure
+            6.25,  # Reynolds number (used in Navier–Stokes equations)
+            51.2,  # Inlet pressure
         ),
     ],
 )

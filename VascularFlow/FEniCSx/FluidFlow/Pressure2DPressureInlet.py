@@ -201,21 +201,21 @@ def pressure_2d_pressure_inlet(
         opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
         ksp.setFromOptions()
         # Solve the nonlinear problem
-        log.set_log_level(log.LogLevel.INFO)
+        log.set_log_level(log.LogLevel.WARNING)
         n, converged = newton_solver.solve(wh)
-        print(f"Newton solver completed in {n} iterations. Converged: {converged}")
+        print(f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}")
 
     else:
-        # Defining the source term over the fluid domain
+        # Defining the source term and reynolds number over the fluid domain
         f = dolfinx.fem.Constant(fluid_domain, dolfinx.default_scalar_type((0, 0)))
 
         # Variational form
-        F = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx
+        F = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx # Diffusion term
         F -= ufl.dot(ufl.grad(u) * n, v) * ds
-        F -= ufl.inner(p, ufl.div(v)) * ufl.dx
+        F -= ufl.inner(p, ufl.div(v)) * ufl.dx # Pressure gradient
         F += ufl.dot(p * n, v) * ds
-        F += ufl.inner(ufl.div(u), q) * ufl.dx
-        F -= ufl.inner(f, v) * ufl.dx
+        F += ufl.inner(ufl.div(u), q) * ufl.dx # Continuity equation
+        F -= ufl.inner(f, v) * ufl.dx # Source term
         a, L = ufl.system(F)
 
         # Compile the bi-linear and linear forms for assembly

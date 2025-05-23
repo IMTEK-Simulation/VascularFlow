@@ -189,7 +189,7 @@ def two_dimensional_steady_fsi_dual_channel(
             dimensionless_extensional_stiffness,
             p2,
             p1,
-            linera=True,
+            linera=False,
         )
         # Apply under-relaxation to stabilize updates
         w_star = (
@@ -278,6 +278,7 @@ def two_dimensional_steady_fsi_dual_channel(
         channel2_domain = channel2_domain_star
 
         iteration += 1
+        #print('iteration = ',iteration)
 
         residual_values.append(residual)
         iteration_indices.append(iteration)

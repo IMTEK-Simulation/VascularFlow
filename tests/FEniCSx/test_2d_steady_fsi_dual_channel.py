@@ -36,19 +36,19 @@ from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
             1,
             0,
             50,
-            50,
             0,
+            50,
             500,
             10,
-            1.0,
-            1.0,
-            100,
-            100,
-            9e4,
-            1.6e5,
+            0.8,
+            0.8,
+            106,
+            837,
+            156250,
+            2812500,
             0.0003,
             1e-4,
-            2000,
+            1000,
         ),
     ],
 )
@@ -149,20 +149,21 @@ def plot_dual_channel_profiles(wall_disp, p1, p2, res, it, length):
         it[1:], res[1:], label="residual vs iteration number", color="orange"
     )
 
-    ax[0].set_ylabel("w (displacement)")
-    ax[1].set_ylabel("p1")
-    ax[2].set_ylabel("p2")
+    ax[0].set_ylabel(r"$\tilde{w}$")
+    ax[1].set_ylabel(r"$\tilde{p_1}$")
+    ax[2].set_ylabel(r"$\tilde{p_2}$")
     ax[3].set_ylabel("Residual (log scale)")
 
-    ax[0].set_xlabel("x (channel length)")
-    ax[1].set_xlabel("x (channel length)")
-    ax[2].set_xlabel("x (channel length)")
+    ax[0].set_xlabel(r"$\tilde{x}$")
+    ax[1].set_xlabel(r"$\tilde{x}$")
+    ax[2].set_xlabel(r"$\tilde{x}$")
     ax[3].set_xlabel("Cumulative Iteration Count")
 
     for a in ax:
         a.grid(True)
-        a.legend()
+        #a.legend()
 
     plt.suptitle("FSI Dual Channel Results")
     plt.tight_layout()
+    plt.savefig("dual channel parallel flow.png")
     plt.show()

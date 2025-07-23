@@ -157,7 +157,7 @@ def steady_state_fsi_single_channel(
             dimensionless_extensional_stiffness,
             p, # Pressure from fluid applied to the wall
             ambient_pressure,
-            linera=True,
+            "moderately_large_deflection",
         )
         # Under-relaxation for numerical stability of the coupled system
         w_star = (

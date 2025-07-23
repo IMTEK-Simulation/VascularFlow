@@ -40,15 +40,15 @@ from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
             50,
             500,
             10,
-            0.8,
-            0.8,
-            106,
-            837,
-            156250,
-            2812500,
-            0.0003,
-            1e-4,
-            1000,
+            14.5,   #Re1
+            14.5,   #Re2
+            6.18,   #p1
+            16.17,    #p2
+            47562,   #beta
+            570749,  #gamma
+            0.005, #relax
+            1e-6,   #tol
+            2000,    #max it
         ),
     ],
 )
@@ -116,8 +116,14 @@ def test_two_dimensional_steady_fsi_dual_channel(
         epsilon,
     )
 
+    dx = abs(inlet_x_channel1 - outlet_x_channel1) / nb_mesh_nodes_x
+    dy = np.diff(wall_displacement)
+    ds = np.sqrt(dx ** 2 + dy ** 2)
+    s = np.sum(ds)
+    print(f"Arc length s = {s}")
     # Diagnostics
     max_disp = np.max(np.abs(wall_displacement))
+    print(f"Max disp = {max_disp}")
     assert max_disp > 0.0, "Wall displacement should be non-zero under pressure load."
 
     # Optional visualization
@@ -135,35 +141,50 @@ def test_two_dimensional_steady_fsi_dual_channel(
         )
 
 
+
 def plot_dual_channel_profiles(wall_disp, p1, p2, res, it, length):
     """
-    Plots displacement, pressure profiles, and  residual vs iteration number
+    Plots displacement, pressure profiles, and residual vs iteration number
     """
     x = np.linspace(0, length, len(wall_disp))
 
-    fig, ax = plt.subplots(nrows=4, ncols=1, figsize=(10, 8))
-    ax[0].plot(x, wall_disp, label="Displacement", color="green")
+    # Create subplots with shared x-axis for top three plots
+    fig, ax = plt.subplots(nrows=4, ncols=1, figsize=(14, 11), constrained_layout=True)
+
+    # Share x-axis for ax[1] and ax[2] with ax[0]
+    ax[1].sharex(ax[0])
+    ax[2].sharex(ax[0])
+
+    # Plot data
+    ax[0].plot(x, wall_disp, label="Beam displacement", color="green")
     ax[1].plot(x, p1, label="Channel 1 Pressure", color="blue")
     ax[2].plot(x, p2, label="Channel 2 Pressure", color="red")
-    ax[3].semilogy(
-        it[1:], res[1:], label="residual vs iteration number", color="orange"
-    )
+    ax[3].semilogy(it[1:], res[1:], label="Residual vs iteration", color="orange")
 
-    ax[0].set_ylabel(r"$\tilde{w}$")
-    ax[1].set_ylabel(r"$\tilde{p_1}$")
-    ax[2].set_ylabel(r"$\tilde{p_2}$")
+    # Set y-labels (shorter and clearer, split across lines)
+    ax[0].set_ylabel("Normalized displacement\n$\\tilde{w} = \\dfrac{w}{H_0}$")
+    ax[1].set_ylabel("Normalized Pressure (Channel 1)\n$\\tilde{p}_1 = \\dfrac{p_{1,\\,\\mathrm{inlet}}}{\\rho U^2}$")
+    ax[2].set_ylabel("Normalized Pressure (Channel 2)\n$\\tilde{p}_2 = \\dfrac{p_{2,\\,\\mathrm{inlet}}}{\\rho U^2}$")
     ax[3].set_ylabel("Residual (log scale)")
 
-    ax[0].set_xlabel(r"$\tilde{x}$")
-    ax[1].set_xlabel(r"$\tilde{x}$")
-    ax[2].set_xlabel(r"$\tilde{x}$")
+    # Set x-labels
+    ax[2].set_xlabel("Normalized distance\n$\\tilde{x} = \\dfrac{x}{H_0}$")
     ax[3].set_xlabel("Cumulative Iteration Count")
 
+    # Hide redundant x-tick labels for upper shared plots
+    ax[0].tick_params(labelbottom=False)
+    ax[1].tick_params(labelbottom=False)
+
+    # Enable grid for all plots
     for a in ax:
         a.grid(True)
-        #a.legend()
 
-    plt.suptitle("FSI Dual Channel Results")
-    plt.tight_layout()
-    plt.savefig("dual channel parallel flow.png")
+    # Align y-labels for top 3 plots
+    fig.align_ylabels(ax[:3])
+
+    # Set the figure title
+    fig.suptitle("FSI Dual Channel (counter flow) Results")
+
+    # Save and show
+    fig.savefig("dual channel parallel flow.png", bbox_inches="tight")
     plt.show()

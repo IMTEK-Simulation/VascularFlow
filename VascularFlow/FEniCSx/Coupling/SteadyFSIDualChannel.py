@@ -189,7 +189,7 @@ def two_dimensional_steady_fsi_dual_channel(
             dimensionless_extensional_stiffness,
             p2,
             p1,
-            linera=False,
+            "large_deflection",
         )
         # Apply under-relaxation to stabilize updates
         w_star = (

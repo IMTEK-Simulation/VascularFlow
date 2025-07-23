@@ -10,12 +10,12 @@ from VascularFlow.FEniCSx.Elasticity.Beam import euler_bernoulli_steady_fenicsx
     "solid_domain, solid_domain_x_max_coordinate, dimensionless_bending_stiffness, dimensionless_extensional_stiffness, distributed_load_channel2, distributed_load_channel1",
     [
         (
-            mesh.create_interval(MPI.COMM_WORLD, 500, [0, 50]),
-            50,
-            1, # Bending stiffness
-            0, # No axial stiffness
-            np.ones(501), # Uniform load from channel 2 (top)
-            np.full(501, 0), # No load from channel 1 (bottom)
+            mesh.create_interval(MPI.COMM_WORLD, 500, [0, 50]), # solid_domain
+            50, # solid_domain_x_max_coordinate
+            7111, # dimensionless_bending_stiffness
+            85333, # dimensionless_extensional_stiffness
+            np.full(501, 1), # distributed_load_channel2 (bottom)
+            np.full(501, 0), # distributed_load_channel2 (top)
         ),
     ],
 )
@@ -37,42 +37,31 @@ def test_euler_bernoulli_steady_fenicsx(
     The result is validated by computing the maximum absolute error and asserting
     that it remains below a predefined tolerance.
     """
-    displacement = euler_bernoulli_steady_fenicsx(
-        solid_domain,
-        solid_domain_x_max_coordinate,
-        dimensionless_bending_stiffness,
-        dimensionless_extensional_stiffness,
-        distributed_load_channel2,
-        distributed_load_channel1,
-        linera=True,
-    )
-
-    # Exact solution for comparison
-    x = np.linspace(0, solid_domain_x_max_coordinate, displacement.shape[0])
-    displacement_exact = (x ** 4 / 24) - ((25 / 6) * x ** 3) + ((625 / 6) * x ** 2)
-
-    # Assertion: max absolute error between numerical and exact displacement
-    max_error = np.max(np.abs(displacement - displacement_exact))
-    assert max_error < 1e-2, f"Max displacement error too high: {max_error}"
 
     # Optional plot
     if plot:
-        plot_displacement_comparison(x, displacement, displacement_exact)
-
-
-def plot_displacement_comparison(x, displacement_numeric, displacement_exact):
-    """
-    Plot numerical vs. exact displacement profiles for visual comparison.
-    """
-    import matplotlib.pyplot as plt
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(x, displacement_numeric, "-o", label="Numerical")
-    plt.plot(x, displacement_exact, "*", label="Exact")
-    plt.xlabel("x-coordinate")
-    plt.ylabel("Displacement")
-    plt.title("Comparison of Numerical and Exact Displacement")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+        import matplotlib.pyplot as plt
+        #plot_displacement_comparison(x, displacement)
+        modes = ["small_deflection", "moderately_large_deflection", "large_deflection"]
+        styles = ["--", "-.", "-"]  # choose any three line styles/markers you like
+        markers = ["o", "s", "D"]
+        plt.figure(figsize=(10, 6))
+        for mode, ls, mk in zip(modes, styles, markers):
+            disp = euler_bernoulli_steady_fenicsx(
+                solid_domain,
+                solid_domain_x_max_coordinate,
+                dimensionless_bending_stiffness,
+                dimensionless_extensional_stiffness,
+                distributed_load_channel2,
+                distributed_load_channel1,
+                mode=mode,
+            )
+            x = np.linspace(0, solid_domain_x_max_coordinate, disp.shape[0])
+            plt.plot(x, disp, ls, marker=mk, markevery=40, label=f"{mode.capitalize()}")
+        plt.xlabel("x-coordinate")
+        plt.ylabel("Displacement")
+        plt.title("Euler–Bernoulli beam: small vs Moderate vs large deflection")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()

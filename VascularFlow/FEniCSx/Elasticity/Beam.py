@@ -42,7 +42,7 @@ def euler_bernoulli_steady_fenicsx(
     dimensionless_extensional_stiffness: float,
     distributed_load_channel2: np.ndarray,
     distributed_load_channel1: np.ndarray,
-    linera: bool,
+    mode,          # ⇦ “small_deflection”, “moderately_large_deflection”, “large_deflection”
 ):
     """
     Solves the steady-state Euler-Bernoulli beam equation on a solid domain using FEniCSx.
@@ -67,9 +67,12 @@ def euler_bernoulli_steady_fenicsx(
         Nodal values of distributed external loads applied from channel 1(upper channel),
         representing fluid pressure which act in opposition with channel 2.
 
-    linera : bool
-        Flag indicating whether the solver should use a linear or nonlinear formulation.
-        If True, assumes a linear model. If False, includes nonlinear effects.
+    mode : bool
+        Specifies the geometric non-linearity model to use in the beam formulation.
+        Options:
+            "linear"    – Small deflection theory. Assumes infinitesimal strains and linear curvature.
+            "moderate"  – Moderately large deflections.
+            "nonlinear" – Full geometrically nonlinear theory. Uses exact strain and curvature expressions without approximations.
     Returns
     -------
     displacement_function : np.ndarray
@@ -141,7 +144,10 @@ def euler_bernoulli_steady_fenicsx(
     q_channel1 = fem.Function(V)
     q_channel1.x.array[::2] = distributed_load_channel1
 
-    if linera is True:
+    if mode not in {"small_deflection", "moderately_large_deflection", "large_deflection"}:
+        raise ValueError(f"unknown mode '{mode}'")
+
+    if mode == "small_deflection":
         # Forming and solving the linear system
         a = alpha * ufl.dot(ufl.div(ufl.grad(u)), ufl.div(ufl.grad(v))) * ufl.dx
         L = q_channel2 * v * ufl.dx - q_channel1 * v * ufl.dx
@@ -149,13 +155,37 @@ def euler_bernoulli_steady_fenicsx(
             a, L, bcs=BCs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"}
         )
         uh = problem.solve()
-    else:
+    elif mode == "moderately_large_deflection":
         # Forming and solving the non-linear system
         def non_linear_term(u):
             return ufl.grad(u) ** 2
 
         F = alpha * ufl.dot(ufl.div(ufl.grad(uh)), ufl.div(ufl.grad(v))) * ufl.dx
-        F -= beta * non_linear_term(uh) * ufl.dot(ufl.div(ufl.grad(uh)), v) * ufl.dx
+        F -= 1.5 * beta * non_linear_term(uh) * ufl.dot(ufl.div(ufl.grad(uh)), v) * ufl.dx
+        F -= q_channel2 * v * ufl.dx
+        F += q_channel1 * v * ufl.dx
+        problem = NonlinearProblem(F, uh, bcs=BCs)
+        solver = NewtonSolver(MPI.COMM_WORLD, problem)
+        solver.convergence_criterion = "incremental"
+        solver.rtol = 1e-6
+        solver.report = False
+
+        log.set_log_level(log.LogLevel.WARNING)
+        n, converged = solver.solve(uh)
+        assert converged
+        print(f"Nonlinear Euler–Bernoulli beam solver converged in: {n:d} iterations")
+    elif mode == "large_deflection":
+        # Forming and solving the non-linear system
+        def non_linear_terms(u):
+            return (
+                1 / (1 + ufl.grad(u) ** 2) ** 3,
+                (ufl.sqrt(1 + ufl.grad(u) ** 2) - 1) / ufl.sqrt(1 + ufl.grad(u) ** 2),
+                (ufl.div(ufl.grad(u))) ** 2 / (1 + ufl.grad(u) ** 2) ** 4,
+            )
+
+        F = alpha * non_linear_terms(uh)[0] * ufl.dot(ufl.div(ufl.grad(uh)), ufl.div(ufl.grad(v))) * ufl.dx
+        F += beta * non_linear_terms(uh)[1] * ufl.dot(ufl.grad(uh), ufl.grad(v)) * ufl.dx
+        F -= 3 * alpha * non_linear_terms(uh)[2] * ufl.dot(ufl.grad(uh), ufl.grad(v)) * ufl.dx
         F -= q_channel2 * v * ufl.dx
         F += q_channel1 * v * ufl.dx
         problem = NonlinearProblem(F, uh, bcs=BCs)
@@ -169,6 +199,7 @@ def euler_bernoulli_steady_fenicsx(
         assert converged
         print(f"Nonlinear Euler–Bernoulli beam solver converged in: {n:d} iterations")
 
+
     # Extract displacement and rotation values from the mixed solution `uh` by splitting the array:
     # even-indexed entries correspond to displacement, and odd-indexed entries correspond to rotation
     displacement = np.empty(0)
@@ -180,3 +211,4 @@ def euler_bernoulli_steady_fenicsx(
             displacement = np.append(displacement, x)
 
     return displacement
+

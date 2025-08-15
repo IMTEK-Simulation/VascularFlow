@@ -1,20 +1,26 @@
 """
-Definition of matrices for a global system of equations used in 1D finite element methods.
+Definition of matrices and vectors for a global system of equations used in 1D and 2D finite element methods.
 
 Intervals:
-- Interpolation in an arbitrary interval
+- 1D:Interpolation in an arbitrary interval
+- 2D:Square reference element Ê = [−1, 1]×[−1, 1] centered at the origin of the Cartesian (ξ , η) coordinate system
 
 Basis function types:
-- LinearBasis
-- QuadraticBasis
-- HermiteBasis
+1D:
+    - LinearBasis
+    - QuadraticBasis
+    - HermiteBasis
+2D:
+    - Bi-linear shape functions
+    - adini clough melosh (ACM)
 """
 
 import numpy as np
 from numpy import ndarray
 
 from VascularFlow.Numerics.BasisFunctions import BasisFunction
-
+from VascularFlow.Numerics.ElementMatrices import element_matrices_or_vectors_2d
+from VascularFlow.Numerics.Connectivity2D import build_connectivity
 
 def assemble_global_matrices(
     mesh_nodes: ndarray,
@@ -80,3 +86,89 @@ def assemble_global_matrices(
     global_vector[np.abs(global_vector) < tol] = 0.0
 
     return global_matrix, global_vector
+
+
+
+########################## Assembly of matrices and vectors used in 2D finite element methods. #########################
+
+def assemble_global_matrices_vectors_2d(
+        shape_function,
+        domain_length: float,
+        domain_height: float,
+        n_x: int,
+        nb_quad_pts_2d: int = 9,
+        source_func: callable = None
+
+):
+    """
+    Assemble the global stiffness matrix K, global mass matrix M,
+    and global source vector F for a structured 2D rectangular mesh
+    of four-node bilinear (Q1) elements.
+
+    Parameters
+    ----------
+    shape_function : ShapeFunction
+        Instance of a shape function class implementing `.eval()` and `.first_derivative()`.
+    domain_length : float
+        Length of the rectangular domain in the x-direction.
+    domain_height : float
+        Height of the rectangular domain in the y-direction.
+    n_x : int
+        Number of nodes in the horizontal (x) direction.
+    nb_quad_pts_2d : int, optional
+        Number of 2D Gaussian quadrature points (default: 9).
+    source_func : callable, optional
+        Source term function f(ξ, η), takes two arguments (local coordinates).
+        If None, the source vector will be zero.
+
+    Returns
+    -------
+    K : np.ndarray
+        Global stiffness matrix of shape (N_nodes, N_nodes).
+    M : np.ndarray
+        Global mass matrix of shape (N_nodes, N_nodes).
+    F : np.ndarray
+        Global source vector of shape (N_nodes,).
+    elements : list[list[int]]
+        Element connectivity list, where each sub-list contains
+        the 4 global node indices for that element.
+    """
+
+    # Element width in x-direction
+    dx = domain_length / (n_x - 1)
+
+    # Number of nodes in y-direction (for a structured 2D rectangular mesh dx = dy)
+    n_y = int(domain_height / dx) + 1
+
+    # Build element connectivity
+    elements, N_nodes = build_connectivity(n_x, n_y, one_based=False)
+
+    # For uniform mesh with constant coefficients, local matrices are identical → compute once
+    K_e = element_matrices_or_vectors_2d(shape_function, nb_quad_pts_2d, dx, kind="stiffness")
+    M_e = element_matrices_or_vectors_2d(shape_function, nb_quad_pts_2d, dx, kind="mass")
+    F_e = element_matrices_or_vectors_2d(shape_function, nb_quad_pts_2d, dx, kind="source", f=source_func)
+
+    # Initialize global matrices and vector
+    K = np.zeros((N_nodes, N_nodes))
+    M = np.zeros((N_nodes, N_nodes))
+    F = np.zeros(N_nodes)
+
+    # Assembly process
+    for conn in elements:                   # Loop over all elements
+        # conn: [bottom-left, bottom-right, top-right, top-left] (0-based global indices)
+        for a, I in enumerate(conn):        # Local row index a maps to global row I
+            F[I] += F_e[a]                  # Add local source term to global vector
+            for b, J in enumerate(conn):    # Local col index b maps to global col J
+                K[I, J] += K_e[a, b]
+                M[I, J] += M_e[a, b]
+
+    return K, M, F, n_y
+
+
+
+
+
+
+
+
+

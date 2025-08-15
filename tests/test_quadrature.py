@@ -2,8 +2,13 @@ import numpy as np
 import pytest
 
 from VascularFlow.Numerics.BasisFunctions import HermiteBasis
-from VascularFlow.Numerics.Quadrature import gaussian_quadrature1, gaussian_quadrature
+from VascularFlow.Numerics.Quadrature import (
+    gaussian_quadrature1,
+    gaussian_quadrature,
+    integrate_over_square,
+)
 
+# 1D test functions: (function, expected_result, tolerance)
 _functions = [
     (lambda x: x, 0, 1),
     (lambda x: x**2, 2 / 3, 2),
@@ -41,5 +46,44 @@ def test_gaussian_quadrature_hermite_basis(nb_quad_pts):
         func = lambda x: basis_function.second_derivative(y_n, w_g, x)
         integral_value = gaussian_quadrature(nb_quad_pts, 0.0, 0.5, func)
         expected_value = expected_values[i]
-        #assert np.isclose(integral_value, expected_value, atol=1e-2)
+        # assert np.isclose(integral_value, expected_value, atol=1e-2)
         print(integral_value)
+
+
+############################### 2D test functions: (function, expected_result, tolerance) ##############################
+_functions_2d = [
+    (
+        lambda s, n: (1 / 16) * ((1 - n) ** 2 + (1 - s) ** 2),
+        0.666,  # Expected result for f1
+        1e-2,
+    ),
+    (
+        lambda s, n: (1 / 16) * (-((1 - n) ** 2) + (1 - s**2)),
+        -0.166,  # Expected result for f2
+        1e-2,
+    ),
+    (
+        lambda s, n: (1 / 16) * (-(1 - n**2) - (1 - s**2)),
+        -0.333,  # Expected result for f2
+        1e-2,
+    ),
+]
+
+
+@pytest.mark.parametrize("func, expected, tol", _functions_2d)
+def test_integrate_over_square(func, expected, tol):
+    """
+    Test 2D Gaussian quadrature integration over the reference square [-1, 1] x [-1, 1].
+
+    This test evaluates the numerical integration of 2D scalar functions using a
+    9-point tensor-product Gauss quadrature rule. It compares the result of the
+    quadrature with the known expected value and verifies accuracy within a given tolerance.
+
+    Each test case provides:
+        - a lambda function f(ξ, η)
+        - an expected integral value
+        - an allowed numerical tolerance
+    """
+    result = integrate_over_square(func, nb_quad_pts_2d=9)
+    assert np.isclose(result, expected, atol=tol), f"Expected {expected}, got {result}"
+

@@ -1,14 +1,31 @@
 """
-Definition of basis functions and their derivatives used in 1D finite element methods.
+1)
+    Definition of basis functions and their derivatives used in 1D finite element methods.
 
-Intervals:
-- Unit interval [0, 1]
-- Interpolation in an arbitrary interval
+    Intervals:
+        - Unit interval [0, 1]
+        - Interpolation in an arbitrary interval
 
-Basis function types:
-- LinearBasis
-- QuadraticBasis
-- HermiteBasis
+    Basis function types:
+        - LinearBasis
+        - QuadraticBasis
+        - HermiteBasis
+
+2)
+    Definition of shape functions and their derivatives used in 2D finite element methods.
+
+    Element type:
+        -Quadrilateral elements
+
+    Intervals:
+        -Square reference element Ê = [−1, 1]×[−1, 1] centered at the origin of the Cartesian (ξ, η) coordinate system
+
+    Shape functions types:
+        - Bi-linear shape functions
+        - Adini-Clough-Melosh (ACM)
+            * The shape functions are defined by polynomials of degree three
+            * The ACM element has 12 degrees of freedom
+            * The ACM element is widely used in the analysis of plates
 """
 
 import numpy as np
@@ -138,6 +155,75 @@ class BasisFunction:
         x_k = (y_k - y_n[element_k]) / (y_n[element_k + 1] - y_n[element_k])
         h_k = y_n[element_k + 1] - y_n[element_k]
         return np.sum(w_nk * self.second_derivative(x_k) / (h_k**2), axis=0)
+
+
+class ShapeFunction:
+    """
+    Abstract base class for shape functions on a reference element.
+    Subclasses must implement methods for evaluating the shape function
+    and its derivatives.
+    """
+
+    _nb_nodes = None
+    _dof_per_node = None
+
+    @property
+    def nb_nodes(self):
+        """
+        Returns:
+            int: Number of nodes in the reference element.
+        """
+        return self._nb_nodes
+
+    @property
+    def dof_per_node(self):
+        """
+        Returns:
+            int: Number of degrees of freedom per node.
+        """
+        return self._dof_per_node
+
+    def eval(self, s: np.array, n:np.array):
+        """
+        Evaluate the shape function values on the reference element.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Shape function values at (s, n).
+        """
+
+        raise NotImplementedError
+
+    def first_derivative(self, s: np.array, n:np.array):
+        """
+        Evaluate the first derivatives of the shape functions.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: First derivatives ∇φ_k with shape (4, 2), where
+                        column 0 is ∂φ/∂s and column 1 is ∂φ/∂n.
+        """
+
+        raise NotImplementedError
+
+    def second_derivative(self, s: np.array, n:np.array):
+        """
+        Evaluate the second derivatives of the shape functions.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Second derivatives (not implemented here).
+        """
+        raise NotImplementedError
 
 
 class LinearBasis(BasisFunction):
@@ -325,3 +411,66 @@ class HermiteBasis(BasisFunction):
             A 1D array of shape (4,) containing the values of the second derivative of basis functions at x.
         """
         return np.array([12 * x - 6, 6 * x - 4, -12 * x + 6, 6 * x - 2])
+
+
+class BilinearShapeFunctions(ShapeFunction):
+    """
+    Bilinear shape functions for 4-node quadrilateral (Q1) elements.
+    Defined on the reference square [-1, 1] x [-1, 1].
+
+    Node order:
+        - Node 1: (-1, -1)
+        - Node 2: (+1, -1)
+        - Node 3: (+1, +1)
+        - Node 4: (-1, +1)
+    """
+
+    _nb_nodes = 4
+    _dof_per_node = 1
+
+    def eval(self, s: np.array, n:np.array):
+        """
+        Evaluate the bilinear shape functions φ₁ to φ₄.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Array of shape function values [φ₁, φ₂, φ₃, φ₄].
+        """
+
+        return np.array(
+            [
+                0.25 * (1 - s) * (1 - n),   # φ1
+                0.25 * (1 + s) * (1 - n),   # φ2
+                0.25 * (1 + s) * (1 + n),   # φ3
+                0.25 * (1 - s) * (1 + n),   # φ4
+            ]
+        )
+
+
+    def first_derivative(self, s: np.array, n:np.array):
+        """
+        Evaluate the first derivatives ∇φ_k of the bilinear shape functions.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Array of shape (4, 2) where:
+                        - Row k contains the gradient of φ_k
+                        - Column 0 = ∂φ/∂ξ (s), Column 1 = ∂φ/∂η (n)
+        """
+
+        return np.array([
+            [-(1 - n), -(1 - s)],   # ∇φ1
+            [ (1 - n), -(1 + s)],   # ∇φ2
+            [ (1 + n),  (1 + s)],   # ∇φ3
+            [-(1 + n),  (1 - s)],   # ∇φ4
+        ]) * 0.25
+
+
+
+

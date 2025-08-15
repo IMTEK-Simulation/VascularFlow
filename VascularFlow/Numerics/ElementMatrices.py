@@ -1,19 +1,27 @@
 """
 Definition of matrices for a single element used in 1D finite element methods.
+Definition of matrices for a single reference quadrilateral element used in 2D finite element methods.
 
 Intervals:
-- Interpolation in an arbitrary interval
+- 1D:Interpolation in an arbitrary interval
+- 2D:Square reference element Ê = [−1, 1]×[−1, 1] centered at the origin of the Cartesian (ξ , η) coordinate system
 
 Basis function types:
-- LinearBasis
-- QuadraticBasis
-- HermiteBasis
+1D:
+    - LinearBasis
+    - QuadraticBasis
+    - HermiteBasis
+2D:
+    - Bi-linear shape functions
+    - adini clough melosh (ACM)
 """
 
 import numpy as np
 
 from VascularFlow.Numerics.BasisFunctions import BasisFunction
-from VascularFlow.Numerics.Quadrature import gaussian_quadrature
+from VascularFlow.Numerics.Quadrature import gaussian_quadrature, integrate_over_square
+
+#################### Definition of matrices for a single element used in 1D finite element methods. ####################
 
 
 def element_matrix(nb_quad_pts: int, y_n: np.ndarray, f: callable, g: callable):
@@ -154,3 +162,89 @@ def stiffness_matrix_second_derivative(
         )
 
     return element_matrix(nb_quad_pts, y_n, f, f)
+
+
+######## Definition of matrices for a single reference quadrilateral element used in 2D finite element methods. ########
+
+
+def element_matrices_or_vectors_2d(
+    shape_func, nb_quad_pts_2d: int, dx: float, kind="mass", f=None
+) -> np.ndarray:
+    """
+    Compute the element matrix (mass, stiffness) or load vector (source term)
+    for a given shape function on the reference square [-1, 1] × [-1, 1]
+    using 2D Gaussian quadrature.
+
+    Parameters
+    ----------
+    shape_func : ShapeFunction
+        Shape function instance with `.eval(s, n)` and `.first_derivative(s, n)`.
+    nb_quad_pts_2d : int
+        Number of quadrature points in 2D (4 or 9 supported).
+    dx : float
+        Element side length (square elements assumed).
+    kind : {"mass", "stiffness", "source"}
+        Type of computation:
+            - "mass"     : M_ij = ∬ φ_i φ_j |J| dξ dη
+            - "stiffness": K_ij = ∬ (∇φ_i ⋅ ∇φ_j) |J| dξ dη
+            - "source"   : F_i  = ∬ φ_i f(ξ,η) |J| dξ dη
+    f : callable, optional
+        Source term function f(ξ, η) for "source" case.
+
+    Returns
+    -------
+    np.ndarray
+        Element matrix (nb_nodes × nb_nodes) or vector (nb_nodes,) depending on `kind`.
+    """
+    nb_nodes = shape_func.nb_nodes
+
+    # Jacobin for a square element mapping from reference coords to physical coords
+    J = np.array([[dx / 2, 0.0], [0.0, dx / 2]])
+    detJ = np.linalg.det(J)  # Area scaling factor
+
+    if kind == "mass":
+        M = np.zeros((nb_nodes, nb_nodes))
+        for i in range(nb_nodes):
+            for j in range(nb_nodes):
+                # integrand in reference coords; multiply by |detJ| to map to physical element
+                integrand = (
+                    lambda s, n: shape_func.eval(s, n)[i]
+                    * shape_func.eval(s, n)[j]
+                    * detJ
+                )
+                M[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
+        return M
+
+    elif kind == "stiffness":
+        # Ensure the mapping is valid
+        if detJ <= 0:
+            raise ValueError("Invalid element mapping: |det(J)| must be > 0.")
+
+        # Inverse-transpose of J for transforming gradients
+        J_inv_T = np.linalg.inv(J).T
+
+        K = np.zeros((nb_nodes, nb_nodes))
+        for i in range(nb_nodes):
+            for j in range(nb_nodes):
+
+                def integrand(s, n):
+                    # grad in reference coords: shape (nb_nodes, 2)
+                    grad_hat = shape_func.first_derivative(s, n)
+                    # map to physical coords: ∇φ = ∇_ref φ · J^{-T}
+                    grad_phi = grad_hat @ J_inv_T  # shape (nb_nodes, 2)
+                    return (grad_phi[i] @ grad_phi[j]) * detJ
+
+                K[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
+        return K
+
+    elif kind == "source":
+        if f is None:
+            raise ValueError("Source function f must be provided for kind='source'.")
+        F = np.zeros(nb_nodes)
+        for i in range(nb_nodes):
+            integrand = lambda s, n: shape_func.eval(s, n)[i] * f(s, n) * detJ
+            F[i] = integrate_over_square(integrand, nb_quad_pts_2d)
+        return F
+
+    else:
+        raise ValueError("kind must be 'mass' or 'stiffness'")

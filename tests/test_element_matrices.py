@@ -1,14 +1,19 @@
 """
 Tests for evaluating matrices for a single element used in 1D finite element methods.
+Tests for evaluating matrices for a single element used in 2D finite element methods.
 
 This module verifies:
 - Accuracy of the shape of the element matrices
 - Accuracy of element matrices using manual calculations of the integrals in an arbitrary interval.
 
-Tested basis types:
-- LinearBasis
-- QuadraticBasis
-- HermiteBasis
+Basis function types:
+1D:
+    - LinearBasis
+    - QuadraticBasis
+    - HermiteBasis
+2D:
+    - Bi-linear shape functions
+    - adini clough melosh (ACM)
 """
 
 import numpy as np
@@ -18,6 +23,7 @@ from VascularFlow.Numerics.BasisFunctions import (
     LinearBasis,
     QuadraticBasis,
     HermiteBasis,
+    BilinearShapeFunctions,
 )
 from VascularFlow.Numerics.ElementMatrices import (
     stiffness_matrix_second_derivative,
@@ -25,6 +31,7 @@ from VascularFlow.Numerics.ElementMatrices import (
     stiffness_matrix_fourth_derivative,
     load_vector,
     mass_matrix_fourth_derivatives,
+    element_matrices_or_vectors_2d,
 )
 
 
@@ -97,3 +104,34 @@ def test_element_matrix_or_vector(basis_function_class, element_matrix_or_vector
     # Assertions
     assert result.shape == expected.shape
     np.testing.assert_allclose(result, expected, atol=atol)
+
+
+######## Definition of matrices for a single reference quadrilateral element used in 2D finite element methods. ########
+
+
+@pytest.mark.parametrize("shape_function_class", [BilinearShapeFunctions])
+def test_element_matrix_2d(shape_function_class):
+    """
+    Test the element_matrix function for mass and stiffness matrix generation
+    using a BilinearShapeFunctions instance at the center of the reference square.
+    """
+
+    # Create bilinear basis
+    shape_function = shape_function_class()
+
+    # Compute mass and stiffness element matrices
+    M_elem = element_matrices_or_vectors_2d(
+        shape_function, nb_quad_pts_2d=9, dx=0.05, kind="mass"
+    )
+    K_elem = element_matrices_or_vectors_2d(
+        shape_function, nb_quad_pts_2d=9, dx=0.05, kind="stiffness"
+    )
+    # Example constant source term function f(ξ, η) = 1
+    f_func = lambda s, n: 1.0   # just for testing
+    F = element_matrices_or_vectors_2d(
+        shape_function, nb_quad_pts_2d=9, dx=0.05, kind="source", f=f_func
+    )
+
+    #print("Mass matrix M:\n", M_elem)
+    print("\nStiffness matrix K:\n", K_elem)
+    #print("\nSource vector F:\n", F)

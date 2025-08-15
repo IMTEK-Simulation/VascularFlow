@@ -1,15 +1,17 @@
 """
-Tests for evaluating the correctness of basis functions used in finite element methods.
+Tests for evaluating the correctness of basis functions and shape functions used in finite element methods.
 
 This module verifies:
-- Shape consistency of evaluations and derivatives
-- Accuracy of first and second derivatives using finite-difference approximation
-- Optional visualization of basis functions and their derivatives
+- Shape consistency of evaluations and derivatives (for 1D basis functions).
+- Accuracy of first and second derivatives using finite-difference approximation (for 1D basis functions).
+- Optional visualization of basis functions and their derivatives (for 1D basis functions and 2D shape functions).
 
 Tested basis types:
 - LinearBasis
 - QuadraticBasis
 - HermiteBasis
+- Bi-linear shape functions
+- Adini-Clough-Melosh (ACM)
 """
 
 import numpy as np
@@ -19,6 +21,7 @@ from VascularFlow.Numerics.BasisFunctions import (
     LinearBasis,
     QuadraticBasis,
     HermiteBasis,
+    BilinearShapeFunctions,
 )
 
 
@@ -150,5 +153,28 @@ def test_plot_basis_function(basis_function_class, plot=True):
             ax.grid(True)
             ax.legend()
 
+        plt.tight_layout()
+        plt.show()
+
+
+@pytest.mark.parametrize("shape_function_class", [BilinearShapeFunctions])
+def test_plot_shape_function(shape_function_class, plot=True):
+    shape = shape_function_class()
+    s_vals = np.linspace(-1, 1, 50)
+    n_vals = np.linspace(-1, 1, 50)
+    S, N = np.meshgrid(s_vals, n_vals)
+
+    if plot:
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(2, 2, figsize=(10, 8), subplot_kw={'projection': '3d'})
+        titles = [r"$\hat{\varphi}_1$", r"$\hat{\varphi}_2$", r"$\hat{\varphi}_3$", r"$\hat{\varphi}_4$"]
+
+        for i, ax in enumerate(axs.flat):
+            Z = shape.eval(S, N)[i]
+            ax.plot_surface(S, N, Z, cmap='viridis')
+            ax.set_title(titles[i])
+            ax.set_xlabel("ξ (s)")
+            ax.set_ylabel("η (n)")
+            ax.set_zlabel("φ")
         plt.tight_layout()
         plt.show()

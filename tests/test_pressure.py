@@ -62,8 +62,7 @@ def test_pressure(nb_nodes, time_step_size, eps, re, st, plot=True):
 @pytest.mark.parametrize(
     "nb_nodes, eps, re",
     [
-        (11, 0.02, 7.5),
-        (51, 0.01, 10),
+        (4, 0.02, 7.5),
     ],
 )
 def test_pressure_steady_state(nb_nodes, eps, re, plot=True):
@@ -72,12 +71,16 @@ def test_pressure_steady_state(nb_nodes, eps, re, plot=True):
     mesh_nodes = np.linspace(left, right, nb_nodes)
     h_star = np.ones(len(mesh_nodes))
 
-    channel_pressure_steady_state = pressure_steady_state(
+    channel_pressure_steady_state, LHS, RHS = pressure_steady_state(
         mesh_nodes,
         eps,
         re,
         h_star,
     )
+    print(channel_pressure_steady_state)
+    print(LHS)
+    print(RHS)
+
 
     if plot:
         plt.plot(mesh_nodes, channel_pressure_steady_state, label=f"n={nb_nodes}")

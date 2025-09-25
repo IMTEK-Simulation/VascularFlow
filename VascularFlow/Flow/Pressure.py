@@ -139,4 +139,4 @@ def pressure_steady_state(
     # Solve system
     channel_pressure_steady_state = spsolve(lhs, rhs)
 
-    return channel_pressure_steady_state
+    return channel_pressure_steady_state#, lhs, rhs

@@ -51,6 +51,7 @@ def euler_bernoulli_steady(
     Rotation_n : np.ndarray
         The rotation of the beam for each nodal position along the beam.
     """
+
     basis_function = HermiteBasis()
     element_stiffness_matrix = stiffness_matrix_fourth_derivative
     element_load_vector = load_vector
@@ -75,7 +76,7 @@ def euler_bernoulli_steady(
     solution = spsolve(lhs_bc, rhs_bc)
     displacement = solution[::2]
     # rotation = solution[1::2]
-    return displacement
+    return displacement#, global_stiffness_matrix, global_load_vector
 
 
 def euler_bernoulli_transient(

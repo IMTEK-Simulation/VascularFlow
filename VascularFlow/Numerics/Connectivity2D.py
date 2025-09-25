@@ -94,3 +94,39 @@ def build_connectivity(n_x: int, n_y: int, one_based: bool = False):
 
     N_nodes = n_x * n_y
     return elements, N_nodes
+
+
+def build_connectivity_dofs(
+    n_x: int, n_y: int, dofs_per_node: int = 3, one_based: bool = False
+):
+    """
+    Erzeugt die DOF-Konnektivität für eine Q1-Mesh mit mehreren DOFs pro Knoten.
+
+    Returns
+    -------
+    elements_dof : list[list[int]]
+        Liste von Elementen; jedes Element enthält die globalen DOF-Indizes.
+    N_nodes : int
+        Anzahl der Knoten.
+    N_dofs : int
+        Gesamtanzahl der DOFs im globalen System.
+    """
+    elements, N_nodes = build_connectivity(n_x, n_y, one_based=False)
+    elements_dof = []
+
+    for conn in elements:  # conn = Liste von Knotenindizes
+        dofs = []
+        for node in conn:
+            base = node * dofs_per_node
+            dofs.extend([base + d for d in range(dofs_per_node)])
+        elements_dof.append(dofs)
+
+    N_dofs = N_nodes * dofs_per_node
+
+    if one_based:
+        elements_dof = [[d + 1 for d in elem] for elem in elements_dof]
+
+    return elements_dof, N_nodes, N_dofs
+
+
+# print(build_connectivity_dofs(3, 3, dofs_per_node=3, one_based=False))

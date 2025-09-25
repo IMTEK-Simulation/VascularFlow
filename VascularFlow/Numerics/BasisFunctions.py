@@ -183,7 +183,7 @@ class ShapeFunction:
         """
         return self._dof_per_node
 
-    def eval(self, s: np.array, n:np.array):
+    def eval(self, s: np.array, n: np.array):
         """
         Evaluate the shape function values on the reference element.
 
@@ -197,7 +197,7 @@ class ShapeFunction:
 
         raise NotImplementedError
 
-    def first_derivative(self, s: np.array, n:np.array):
+    def first_derivative(self, s: np.array, n: np.array):
         """
         Evaluate the first derivatives of the shape functions.
 
@@ -212,7 +212,7 @@ class ShapeFunction:
 
         raise NotImplementedError
 
-    def second_derivative(self, s: np.array, n:np.array):
+    def second_derivative(self, s: np.array, n: np.array):
         """
         Evaluate the second derivatives of the shape functions.
 
@@ -428,7 +428,7 @@ class BilinearShapeFunctions(ShapeFunction):
     _nb_nodes = 4
     _dof_per_node = 1
 
-    def eval(self, s: np.array, n:np.array):
+    def eval(self, s: np.array, n: np.array):
         """
         Evaluate the bilinear shape functions φ₁ to φ₄.
 
@@ -442,15 +442,14 @@ class BilinearShapeFunctions(ShapeFunction):
 
         return np.array(
             [
-                0.25 * (1 - s) * (1 - n),   # φ1
-                0.25 * (1 + s) * (1 - n),   # φ2
-                0.25 * (1 + s) * (1 + n),   # φ3
-                0.25 * (1 - s) * (1 + n),   # φ4
+                0.25 * (1 - s) * (1 - n),  # φ1
+                0.25 * (1 + s) * (1 - n),  # φ2
+                0.25 * (1 + s) * (1 + n),  # φ3
+                0.25 * (1 - s) * (1 + n),  # φ4
             ]
         )
 
-
-    def first_derivative(self, s: np.array, n:np.array):
+    def first_derivative(self, s: np.array, n: np.array):
         """
         Evaluate the first derivatives ∇φ_k of the bilinear shape functions.
 
@@ -464,13 +463,345 @@ class BilinearShapeFunctions(ShapeFunction):
                         - Column 0 = ∂φ/∂ξ (s), Column 1 = ∂φ/∂η (n)
         """
 
-        return np.array([
-            [-(1 - n), -(1 - s)],   # ∇φ1
-            [ (1 - n), -(1 + s)],   # ∇φ2
-            [ (1 + n),  (1 + s)],   # ∇φ3
-            [-(1 + n),  (1 - s)],   # ∇φ4
-        ]) * 0.25
+        return (
+            np.array(
+                [
+                    [-(1 - n), -(1 - s)],  # ∇φ1
+                    [(1 - n), -(1 + s)],  # ∇φ2
+                    [(1 + n), (1 + s)],  # ∇φ3
+                    [-(1 + n), (1 - s)],  # ∇φ4
+                ]
+            )
+            * 0.25
+        )
 
 
+class ACMShapeFunctions(ShapeFunction):
+    """
+    Adini-Clough-Melosh (ACM) shape functions for 12-node quadrilateral elements.
+    Defined on the reference square [-1, 1] x [-1, 1].
+
+    Node order:
+        - Node 1: (-1, -1)
+        - Node 2: (1, -1)
+        - Node 3: (1, 1)
+        - Node 4: (-1, 1)
+        - Nodes 5-12 are mid-edge and corner nodes.
+    """
+
+    _nb_nodes = 12
+    _dof_per_node = 1
+
+    def eval(self, s: np.array, n: np.array):
+        """
+        Evaluate the ACM shape functions φ₁ to φ₁₂.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Array of shape function values [φ₁, φ₂, ..., φ₁₂].
+        """
+        return np.array(
+            [
+                # φ₁ to φ₁₂
+                # The actual polynomial expressions for each node would be defined here.
+                # N1 =
+                -0.125 * n**3 * s
+                + 0.125 * n**3
+                - 0.125 * n * s**3
+                + 0.5 * n * s
+                - 0.375 * n
+                + 0.125 * s**3
+                - 0.375 * s
+                + 0.25,
+                # N2 =
+                -0.0625 * n**3 * s
+                + 0.0625 * n**3
+                + 0.0625 * n**2 * s
+                - 0.0625 * n**2
+                + 0.0625 * n * s
+                - 0.0625 * n
+                - 0.0625 * s
+                + 0.0625,
+                # N3 =
+                -0.0625 * n * s**3
+                + 0.0625 * n * s**2
+                + 0.0625 * n * s
+                - 0.0625 * n
+                + 0.0625 * s**3
+                - 0.0625 * s**2
+                - 0.0625 * s
+                + 0.0625,
+                # N4 =
+                0.125 * n**3 * s
+                + 0.125 * n**3
+                + 0.125 * n * s**3
+                - 0.5 * n * s
+                - 0.375 * n
+                - 0.125 * s**3
+                + 0.375 * s
+                + 0.25,
+                # N5 =
+                -(n + 1) * (1.0 * n - 0.25 * (n + 1) ** 2) * (s + 1) / 4,
+                # N6 =
+                (s + 1) ** 2 * (0.125 * n + 0.125 * s - 0.0625 * (n + 1) * (s + 1)),
+                # N7 =
+                (n + 1)
+                * (s + 1)
+                * (1.5 * n + 1.5 * s - 0.5 * (n + 1) ** 2 - 0.5 * (s + 1) ** 2 + 2.0)
+                / 4,
+                # N8 =
+                0.0625 * (n - 1) * (n + 1) ** 2 * (s + 1),
+                # N9 =
+                0.0625 * (n + 1) * (s - 1) * (s + 1) ** 2,
+                # N10 =
+                0.125 * n**3 * s
+                - 0.125 * n**3
+                + 0.125 * n * s**3
+                - 0.5 * n * s
+                + 0.375 * n
+                + 0.125 * s**3
+                - 0.375 * s
+                + 0.25,
+                # N11 =
+                (n + 1) ** 2 * (0.125 * n + 0.125 * s - 0.0625 * (n + 1) * (s + 1)),
+                # N12 =
+                -(n + 1) * (s + 1) * (1.0 * s - 0.25 * (s + 1) ** 2) / 4,
+            ]
+        )
+
+    def first_derivative(self, s: np.array, n: np.array):
+        """
+        Evaluate the first derivatives ∇φ_k of the ACM shape functions.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Array of shape (12, 2) where:
+                        - Row k contains the gradient of φ_k
+                        - Column 0 = ∂φ/∂ξ (s), Column 1 = ∂φ/∂η (n)
+        """
+
+        return np.array(
+            [
+                # ∇φ₁ to ∇φ₁₂
+                # The actual polynomial expressions for each node would be defined here.
+                # ∇N1 =
+                [
+                    -0.125 * n**3 - 0.375 * n * s**2 + 0.5 * n + 0.375 * s**2 - 0.375,
+                    -0.375 * n**2 * s + 0.375 * n**2 + 0.5 * s - 0.125 * s**3 - 0.375,
+                ],
+                # ∇N2 =
+                [
+                    -0.0625 * (1 - n) ** 2 * (1 + n),
+                    -0.0625
+                    + n**2 * (0.1875 - 0.1875 * s)
+                    + n * (-0.125 + 0.125 * s)
+                    + 0.0625 * s,
+                ],
+                # ∇N3 =
+                [
+                    -0.0625
+                    - 0.125 * s
+                    + 0.1875 * s**2
+                    + n * (0.0625 + 0.125 * s - 0.1875 * s**2),
+                    -0.0625 * (1 - s) ** 2 * (1 + s),
+                ],
+                # ∇N4 =
+                [
+                    0.375 + 0.125 * n**3 - 0.375 * s**2 + n * (-0.5 + 0.375 * s**2),
+                    -0.375 + n**2 * (0.375 + 0.375 * s) - 0.5 * s + 0.125 * s**3,
+                ],
+                # ∇N5 =
+                [
+                    0.0625 * (1 - n) ** 2 * (1 + n),
+                    -0.0625
+                    + n * (-0.125 - 0.125 * s)
+                    + n**2 * (0.1875 + 0.1875 * s)
+                    - 0.0625 * s,
+                ],
+                # ∇N6 =
+                [
+                    -0.0625
+                    + 0.125 * s
+                    + 0.1875 * s**2
+                    + n * (0.0625 - 0.125 * s - 0.1875 * s**2),
+                    (0.0625 - 0.0625 * s) * (1 + s) ** 2,
+                ],
+                # ∇N7 =
+                [
+                    0.375 - 0.125 * n**3 - 0.375 * s**2 + n * (0.5 - 0.375 * s**2),
+                    0.375 - n**2 * (0.375 + 0.375 * s) + 0.5 * s - 0.125 * s**3,
+                ],
+                # ∇N8 =
+                [
+                    0.0625 * (-1 + n) * (1 + n) ** 2,
+                    0.1875 * (-1 / 3 + n) * (1 + n) * (1 + s),
+                ],
+                # ∇N9 =
+                [
+                    0.1875 * (1 + n) * (-1 / 3 + s) * (1 + s),
+                    0.0625 * (-1 + s) * (1 + s) ** 2,
+                ],
+                # ∇N10 =
+                [
+                    -0.375 + 0.125 * n**3 + 0.375 * s**2 + n * (-0.5 + 0.375 * s**2),
+                    0.375 + n**2 * (-0.375 + 0.375 * s) - 0.5 * s + 0.125 * s**3,
+                ],
+                # ∇N11 =
+                [
+                    (0.0625 - 0.0625 * n) * (1 + n) ** 2,
+                    -0.0625
+                    + n**2 * (0.1875 - 0.1875 * s)
+                    + n * (0.125 - 0.125 * s)
+                    + 0.0625 * s,
+                ],
+                # ∇N12 =
+                [
+                    -0.0625
+                    - 0.125 * s
+                    + 0.1875 * s**2
+                    + n * (-0.0625 - 0.125 * s + 0.1875 * s**2),
+                    0.0625 * (1 - s) ** 2 * (1 + s),
+                ],
+            ]
+        )
+
+    def second_derivative(self, s: np.array, n: np.array):
+        """
+        Evaluate the second derivatives of the ACM shape functions.
+
+        Args:
+            s (np.ndarray): Local horizontal (ξ) coordinates.
+            n (np.ndarray): Local vertical (η) coordinates.
+
+        Returns:
+            np.ndarray: Array of shape (12, 2, 2) where:
+                        - Row k contains the second derivative of φ_k
+                        - Column 0 = ∂²φ/∂ξ², Column 1, 2 = ∂²φ/∂ξ∂η, Column 3 = ∂²φ/∂η²
+        """
+        return np.array(
+            [
+                # ∇²φ₁ to ∇²φ₁₂
+                # The actual polynomial expressions for each node would be defined here.
+                # ∇²N1 =
+                [
+                    [-0.75 * n * s + 0.75 * s, -0.375 * n**2 - 0.375 * s**2 + 0.5],
+                    [-0.375 * n**2 - 0.375 * s**2 + 0.5, -0.75 * n * s + 0.75 * n],
+                ],
+                # ∇²N2 =
+                [
+                    [0, 0.0625 + 0.125 * n - 0.1875 * n**2],
+                    [
+                        0.0625 + 0.125 * n - 0.1875 * n**2,
+                        -0.125 + n * (0.375 - 0.375 * s) + 0.125 * s,
+                    ],
+                ],
+                # ∇²N3 =
+                [
+                    [
+                        -0.125 + n * (0.125 - 0.375 * s) + 0.375 * s,
+                        0.0625 + 0.125 * s - 0.1875 * s**2,
+                    ],
+                    [0.0625 + 0.125 * s - 0.1875 * s**2, 0],
+                ],
+                # ∇²N4 =
+                [
+                    [(-0.75 + 0.75 * n) * s, -0.5 + 0.375 * n**2 + 0.375 * s**2],
+                    [-0.5 + 0.375 * n**2 + 0.375 * s**2, 2 * n * (0.375 + 0.375 * s)],
+                ],
+                # ∇²N5 =
+                [
+                    [0, -0.0625 - 0.125 * n + 0.1875 * n**2],
+                    [
+                        -0.0625 - 0.125 * n + 0.1875 * n**2,
+                        -0.125 + n * (0.375 + 0.375 * s) - 0.125 * s,
+                    ],
+                ],
+                # ∇²N6 =
+                [
+                    [
+                        0.125 + n * (-0.125 - 0.375 * s) + 0.375 * s,
+                        0.0625 - 0.125 * s - 0.1875 * s**2,
+                    ],
+                    [0.0625 - 0.125 * s - 0.1875 * s**2, 0],
+                ],
+                # ∇²N7 =
+                [
+                    [(-0.75 - 0.75 * n) * s, 0.5 - 0.375 * n**2 - 0.375 * s**2],
+                    [0.5 - 0.375 * n**2 - 0.375 * s**2, n * (-0.75 - 0.75 * s)],
+                ],
+                # ∇²N8 =
+                [
+                    [0, 0.1875 * (-1 / 3 + n) * (1 + n)],
+                    [
+                        0.1875 * (-1 / 3 + n) * (1 + n),
+                        0.125 + n * (0.375 + 0.375 * s) + 0.125 * s,
+                    ],
+                ],
+                # ∇²N9 =
+                [
+                    [
+                        0.125 + n * (0.125 + 0.375 * s) + 0.375 * s,
+                        0.1875 * (-1 / 3 + s) * (1 + s),
+                    ],
+                    [0.1875 * (-1 / 3 + s) * (1 + s), 0],
+                ],
+                # ∇²N10 =
+                [
+                    [(0.75 + 0.75 * n) * s, -0.5 + 0.375 * n**2 + 0.375 * s**2],
+                    [-0.5 + 0.375 * n**2 + 0.375 * s**2, 2 * n * (-0.375 + 0.375 * s)],
+                ],
+                # ∇²N11 =
+                [
+                    [0, 0.0625 - 0.125 * n - 0.1875 * n**2],
+                    [
+                        0.0625 - 0.125 * n - 0.1875 * n**2,
+                        0.125 + n * (0.375 - 0.375 * s) - 0.125 * s,
+                    ],
+                ],
+                # ∇²N12 =
+                [
+                    [
+                        -0.125 + n * (-0.125 + 0.375 * s) + 0.375 * s,
+                        -0.0625 - 0.125 * s + 0.1875 * s**2,
+                    ],
+                    [-0.0625 - 0.125 * s + 0.1875 * s**2, 0],
+                ],
+            ]
+        )  # Use dtype=object for complex expressions
 
 
+if __name__ == "__main__":
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D   # nötig für 3D-Plot
+
+    # Deine Klasse
+    acm = ACMShapeFunctions()
+
+    # Gitter im Referenzquadrat [-1,1] x [-1,1]
+    xi = np.linspace(-1, 1, 10)
+    eta = np.linspace(-1, 1, 10)
+    XI, ETA = np.meshgrid(xi, eta)
+
+    # Alle 12 Shape Functions auswerten
+    # -> eval erwartet Vektoren: (s, x) = (XI, ETA)
+    N_all = [acm.eval(XI, ETA)[i] for i in range(12)]
+
+    # Plot
+    for i, Ni in enumerate(N_all, start=1):
+        fig = plt.figure(figsize=(6, 5))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(XI, ETA, Ni, cmap="viridis", edgecolor="none")
+        ax.set_title(f"Shape Function N{i}(ξ, η)")
+        ax.set_xlabel("ξ")
+        ax.set_ylabel("η")
+        ax.set_zlabel(f"N{i}")
+        plt.tight_layout()
+        plt.show()

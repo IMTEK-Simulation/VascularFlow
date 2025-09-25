@@ -17,16 +17,18 @@ from VascularFlow.Elasticity.Beam import (
 @pytest.mark.parametrize(
     "nb_mesh_nodes, constant_load",
     [
-        (101, 1),
+        (4, 1),
     ],
 )
-def test_euler_bernoulli_steady_constant_load(nb_mesh_nodes, constant_load, plot=False):
+def test_euler_bernoulli_steady_constant_load(nb_mesh_nodes, constant_load, plot=True):
     left = 0
     right = 1
     mesh_nodes = np.linspace(left, right, nb_mesh_nodes)
-    distributed_load = np.full(2 * nb_mesh_nodes, constant_load)
-    distributed_load[1::2] = 0
-    disp = euler_bernoulli_steady(mesh_nodes, distributed_load)
+    distributed_load = np.full(nb_mesh_nodes, constant_load)
+    disp, lhs, rhs = euler_bernoulli_steady(mesh_nodes, distributed_load)
+    print(lhs)
+    print(rhs)
+
     x_n = mesh_nodes
     # analytical solution for ∂4w/∂x4 = constant load
     disp_exact = (

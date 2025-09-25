@@ -48,7 +48,7 @@ from VascularFlow.Numerics.ElementMatrices import (
 )
 def test_element_matrix_or_vector(basis_function_class, element_matrix_or_vector):
     nb_quadrature_points = 3
-    y_n = np.array([0, 0.5])
+    y_n = np.array([0, 1])
     basis_function = basis_function_class()
     result = element_matrix_or_vector(nb_quadrature_points, y_n, basis_function)
     print(result.shape)

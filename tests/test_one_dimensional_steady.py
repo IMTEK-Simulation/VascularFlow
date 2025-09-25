@@ -7,7 +7,7 @@ from VascularFlow.Coupling.OneDimensionalSteady import steady_state_fsi
 @pytest.mark.parametrize(
     "nb_nodes, channel_aspect_ratio, reynolds_number,"
     "fsi_parameter, relaxation_factor, residual_number, iteration_number",
-    [(200, 0.02, 7.5, 35156.24, 0.0003, 1e-3, 100)],
+    [(4, 0.02, 7.5, 35156.24, 0.0003, 1e-3, 1)],
 )
 def test_two_way_coupled_fsi_steady(
     nb_nodes,

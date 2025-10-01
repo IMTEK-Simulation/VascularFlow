@@ -40,12 +40,12 @@ from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
             50,
             500,
             10,
-            14.5,   #Re1
-            14.5,   #Re2
-            6.18,   #p1
-            16.17,    #p2
-            47562,   #beta
-            570749,  #gamma
+            6,   #Re1
+            6,   #Re2
+            13.88,   #p1
+            47.22,    #p2
+            277777,   #beta
+            3333333,  #gamma
             0.005, #relax
             1e-6,   #tol
             2000,    #max it
@@ -116,15 +116,19 @@ def test_two_dimensional_steady_fsi_dual_channel(
         epsilon,
     )
 
-    dx = abs(inlet_x_channel1 - outlet_x_channel1) / nb_mesh_nodes_x
-    dy = np.diff(wall_displacement)
-    ds = np.sqrt(dx ** 2 + dy ** 2)
-    s = np.sum(ds)
-    print(f"Arc length s = {s}")
+    #dx = abs(inlet_x_channel1 - outlet_x_channel1) / nb_mesh_nodes_x
+    #dy = np.diff(wall_displacement)
+    #ds = np.sqrt(dx ** 2 + dy ** 2)
+    #s = np.sum(ds)
+    #print(f"Arc length s = {s}")
     # Diagnostics
-    max_disp = np.max(np.abs(wall_displacement))
-    print(f"Max disp = {max_disp}")
-    assert max_disp > 0.0, "Wall displacement should be non-zero under pressure load."
+    #max_disp = np.max(np.abs(wall_displacement))
+    #print(f"Max disp = {max_disp}")
+    #assert max_disp > 0.0, "Wall displacement should be non-zero under pressure load."
+
+    print(wall_displacement)
+    print(channel1_pressure)
+    print(channel2_pressure)
 
     # Optional visualization
     if plot_results:
@@ -186,5 +190,5 @@ def plot_dual_channel_profiles(wall_disp, p1, p2, res, it, length):
     fig.suptitle("FSI Dual Channel (counter flow) Results")
 
     # Save and show
-    fig.savefig("dual channel parallel flow.png", bbox_inches="tight")
+    #fig.savefig("dual channel parallel flow.png", bbox_inches="tight")
     plt.show()

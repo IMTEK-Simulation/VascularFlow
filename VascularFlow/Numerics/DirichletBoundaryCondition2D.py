@@ -78,3 +78,45 @@ def dirichlet_bc(
             l[r] = val  # enforce prescribed boundary value
 
     return a, l
+
+
+# -----------------------------------------------------------------------------
+# dirichlet_bc for acm element
+# -----------------------------------------------------------------------------
+def dirichlet_bc_acm_2d(
+    a: np.ndarray,
+    l: np.ndarray,
+    dof_groups: tuple[list[int], ...],
+    bc_values: float | list[float] | list[list[float]],
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Row-only Dirichlet BCs (non-symmetric): for each constrained DOF k,
+        A[k, :] = 0, A[k,k] = 1, L[k] = value
+    Columns are left untouched.
+    """
+    # normalize values per-group like in your main function
+    n_groups = len(dof_groups)
+    def per_group_vals():
+        if isinstance(bc_values, (int, float)):
+            return [np.full(len(g), float(bc_values)) for g in dof_groups]
+        if isinstance(bc_values, list) and all(isinstance(v, (int, float)) for v in bc_values):
+            if len(bc_values) != n_groups:
+                raise ValueError("Length of bc_values must match number of groups.")
+            return [np.full(len(g), float(v)) for g, v in zip(dof_groups, bc_values)]
+        # per-DOF arrays per group
+        if not isinstance(bc_values, list) or len(bc_values) != n_groups:
+            raise ValueError("Unsupported bc_values format.")
+        out = []
+        for g, vals in zip(dof_groups, bc_values):
+            arr = np.asarray(vals, dtype=float)
+            if arr.shape != (len(g),):
+                raise ValueError(f"Each bc_values group must have length {len(g)}; got {arr.shape}.")
+            out.append(arr)
+        return out
+
+    for group, vals in zip(dof_groups, per_group_vals()):
+        for dof, val in zip(group, vals):
+            a[dof, :] = 0.0       # zero row only
+            a[dof, dof] = 1.0     # set identity on diagonal
+            l[dof] = val          # set RHS
+    return a, l

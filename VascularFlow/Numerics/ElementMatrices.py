@@ -21,14 +21,13 @@ import numpy as np
 from VascularFlow.Numerics.BasisFunctions import (
     BasisFunction,
     ACMShapeFunctions,
-    BilinearShapeFunctions,
 )
 from VascularFlow.Numerics.Quadrature import gaussian_quadrature, integrate_over_square
 
 #################### Definition of matrices for a single element used in 1D finite element methods. ####################
 
 
-def element_matrix(nb_quad_pts: int, y_n: np.ndarray, f: callable, g: callable):
+def element_matrix(nb_quad_pts: int, y_n, f: callable, g: callable):
     """
     compute ∫f.g dx using Gaussian quadrature rule in an arbitrary interval used in definition of element matrices.
 
@@ -36,7 +35,7 @@ def element_matrix(nb_quad_pts: int, y_n: np.ndarray, f: callable, g: callable):
     ----------
     nb_quad_pts : int
         Number of quadrature points.
-    y_n : np.ndarray
+    y_n :
         The integral arbitrary interval.
     f : callable
         An arbitrary function.
@@ -98,7 +97,7 @@ def mass_matrix_fourth_derivatives(
 
 def load_vector(
     nb_quad_pts: int,
-    y_n: np.ndarray,
+    y_n,
     basis_function: BasisFunction,
     g: callable = lambda x: np.ones_like(x),
 ):
@@ -258,118 +257,98 @@ def element_matrices_or_vectors_acm_2d(
     shape_func: ACMShapeFunctions,
     nb_quad_pts_2d: int,
     dx: float,
-    source_func: callable = None,
-) -> np.ndarray:
+    dy: float,
+):
     """
-    Compute the element matrices for bending in
-    x-direction, y-direction, poisson effect, and shear effect
-    for a given ACM shape function on the reference square [-1, 1] × [-1, 1]
-    using 2D Gaussian quadrature.
+    Compute the element stiffness matrix (bending-related) and element load vector
+    for a 2D Adini-Clough-Melosh (ACM) finite element using Gaussian quadrature.
+    for a square element defined over the reference domain [-1, 1] × [-1, 1].
+    The computation is based on the ACM shape functions and their derivatives,
+    using the standard iso parametric mapping with a constant Jacobian (square elements).
 
     Parameters
     ----------
     shape_func : ACMShapeFunctions
-        ACM shape function instance with `.eval(s, n)` and `.first_derivative(s, n)`.
-    nb_quad_pts_2d : int
-        Number of quadrature points in 2D (4 or 9 supported).
-    dx : float
-        Element side length (square elements assumed).
+        Instance providing the shape functions and their derivatives.
+        Must implement:
+            - `eval(s, n)` → shape function values at quadrature point (s, n)
+            - `first_derivative(s, n)` → ∂φ/∂s, ∂φ/∂n at quadrature point
+            - `second_derivative(s, n)` → ∂²φ/∂s², ∂²φ/∂s∂n, ∂²φ/∂n² at quadrature point
+        and an attribute:
+            - `nb_nodes` → number of nodes in the element
 
+    nb_quad_pts_2d : int
+        Number of 2D Gaussian quadrature points.
+        Supported values are 4 (2×2 Gauss) or 9 (3×3 Gauss).
+
+    dx : float
+        all element edges parallel to the x-axis have the same length dx.
+
+    dy : float
+        all element edges parallel to the y-axis have the same length dy.
     Returns
     -------
-    np.ndarray
-        Element matrices (nb_nodes × nb_nodes) Kxx, Kyy, Kpoisson, Kshear.
+    tuple of np.ndarray
+        (K, F)
+        - K : (nb_nodes × nb_nodes) array
+            Element stiffness matrix obtained from integrating the second derivatives
+            of shape functions transformed to physical coordinates.
+        - F : (nb_nodes,) array
+            Element load vector computed by integrating shape functions weighted
+            by the given source function.
     """
+
+    # Number of shape function nodes in the element
     nb_nodes = shape_func.nb_nodes
 
-    # Jacobin for a square element mapping from reference coords to physical coords
-    J = np.array([[dx / 2, 0.0], [0.0, dx / 2]])
-    detJ = np.linalg.det(J)  # Area scaling factor
+    # ---------------------------------------------------------------------
+    # Step 1: Construct Jacobian for mapping reference → physical coordinates
+    # ---------------------------------------------------------------------
+    J = np.array([[dx / 2, 0.0], [0.0, dy / 2]])  # Constant Jacobian for square element
+    detJ = np.linalg.det(J)  # Determinant gives area scaling factor
 
     if detJ <= 0:
         raise ValueError("Invalid element mapping: |det(J)| must be > 0.")
-    # Inverse of J for transforming gradients
+    # Inverse and inverse-transpose for transforming derivatives
     J_inv = np.linalg.inv(J)
     # Inverse-transpose of J for transforming gradients
     J_inv_T = J_inv.T
 
-    Kxx = np.zeros((nb_nodes, nb_nodes))
+    # ---------------------------------------------------------------------
+    # Step 2: Initialize element stiffness matrix
+    # ---------------------------------------------------------------------
+    k = np.zeros((nb_nodes, nb_nodes))
+    # ---------------------------------------------------------------------
+    # Step 3: Numerical integration of stiffness terms using Gaussian quadrature
+    # ---------------------------------------------------------------------
     for i in range(nb_nodes):
         for j in range(nb_nodes):
 
             def integrand(s, n):
-                # grad in reference coords: shape (nb_nodes, 2)
+                """
+                Integrand for stiffness matrix entry K[i, j].
+                Involves transformed second derivatives of shape functions.
+                """
+                # Compute second derivatives in reference coordinates
+                grad = shape_func.second_derivative(s, n)
+                # Map second derivatives to physical coordinates:
+                # ∇²φ_phys = J^{-T} · ∇²φ_ref · J^{-1}
+                grad_hat = grad @ J_inv_T
+                return (np.sum(grad_hat[i] * grad_hat[j])) * detJ
 
-                grad_hat_i = shape_func.second_derivative(s, n)[i]
-                grad_hat_j = shape_func.second_derivative(s, n)[j]
-                # map to physical coords: ∇²φ = J^{-T} · ∇²_ref φ · J^{-1}
-                grad_phi_i = J_inv_T @ grad_hat_i @ J_inv
-                grad_phi_j = J_inv_T @ grad_hat_j @ J_inv
-                return (grad_phi_i[0, 0] * grad_phi_j[0, 0]) * detJ
+            k[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
+            tol = 1e-6
+            k[np.abs(k) < tol] = 0.0
 
-            Kxx[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
-
-    Kyy = np.zeros((nb_nodes, nb_nodes))
+            # ---------------------------------------------------------------------
+    # Step 4: Compute element force vector if source function is provided
+    # ---------------------------------------------------------------------
+    f = np.zeros(nb_nodes)
     for i in range(nb_nodes):
-        for j in range(nb_nodes):
-
-            def integrand(s, n):
-                # grad in reference coords: shape (nb_nodes, 2)
-                grad_hat_i = shape_func.second_derivative(s, n)[i]
-                grad_hat_j = shape_func.second_derivative(s, n)[j]
-                # map to physical coords: ∇²φ = J^{-T} · ∇²_ref φ · J^{-1}
-                grad_phi_i = J_inv_T @ grad_hat_i @ J_inv
-                grad_phi_j = J_inv_T @ grad_hat_j @ J_inv
-                return (grad_phi_i[1, 1] * grad_phi_j[1, 1]) * detJ
-
-            Kyy[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
-
-    Kxy = np.zeros((nb_nodes, nb_nodes))
-    for i in range(nb_nodes):
-        for j in range(nb_nodes):
-
-            def integrand(s, n):
-                # grad in reference coords: shape (nb_nodes, 2)
-                grad_hat_i = shape_func.second_derivative(s, n)[i]
-                grad_hat_j = shape_func.second_derivative(s, n)[j]
-                # map to physical coords: ∇²φ = J^{-T} · ∇²_ref φ · J^{-1}
-                grad_phi_i = J_inv_T @ grad_hat_i @ J_inv
-                grad_phi_j = J_inv_T @ grad_hat_j @ J_inv
-                return 2 * (grad_phi_i[0, 1] * grad_phi_j[0, 1]) * detJ
-
-            Kxy[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)
-
-    if source_func is None:
-        raise ValueError("Source function f must be provided for kind='source'.")
-    F = np.zeros(nb_nodes)
-    for i in range(nb_nodes):
-        integrand_F = lambda s, n: shape_func.eval(s, n)[i] * source_func(s, n) * detJ
-        F[i] = integrate_over_square(integrand_F, nb_quad_pts_2d)
-
-    return Kxx, Kyy, Kxy, F
-
-
-if __name__ == "__main__":
-    # Example usage of element_matrices_or_vectors_acm_2d
-    dx = 1.0  # Element side length
-    nb_quad_pts_2d = 9  # Number of quadrature points
-    source_func = lambda x, y: 1.0  # Example source function (constant)
-
-    # Compute element matrices for ACM shape functions
-    Kxx, Kyy, Kxy, F = element_matrices_or_vectors_acm_2d(
-        shape_func=ACMShapeFunctions(),
-        nb_quad_pts_2d=nb_quad_pts_2d,
-        dx=dx,
-        source_func=source_func,
-    )
-    K = element_matrices_or_vectors_2d(
-        shape_func=BilinearShapeFunctions(),
-        nb_quad_pts_2d=nb_quad_pts_2d,
-        dx=dx,
-        kind="mass",
-    )
-    print(Kxx - Kxx.T)
-    # print("Kxx:\n", Kxx)
-    # print("Kyy:\n", Kyy)
-    # print("Kxy:\n", Kxy)
-    # print("F:\n", F)
+        # Integrand for load vector entry f[i]
+        integrand_f = lambda s, n: shape_func.eval(s, n)[i] * detJ
+        f[i] = integrate_over_square(integrand_f, nb_quad_pts_2d)
+    # ---------------------------------------------------------------------
+    # Step 5: Return computed element matrices
+    # ---------------------------------------------------------------------
+    return k, f

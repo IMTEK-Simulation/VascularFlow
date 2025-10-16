@@ -76,7 +76,7 @@ def euler_bernoulli_steady(
     solution = spsolve(lhs_bc, rhs_bc)
     displacement = solution[::2]
     # rotation = solution[1::2]
-    return displacement#, global_stiffness_matrix, global_load_vector
+    return displacement, global_stiffness_matrix, global_load_vector
 
 
 def euler_bernoulli_transient(

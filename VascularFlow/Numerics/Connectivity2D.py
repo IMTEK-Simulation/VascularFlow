@@ -96,37 +96,79 @@ def build_connectivity(n_x: int, n_y: int, one_based: bool = False):
     return elements, N_nodes
 
 
-def build_connectivity_dofs(
+# -------------------------------------------------------------------------
+# Function: build_connectivity_acm
+# -------------------------------------------------------------------------
+# Purpose:
+# --------
+# Construct the *degree-of-freedom (DOF) connectivity list* for a structured
+# 2D finite element mesh using acm elements on a rectangular grid.
+#
+# This function extends the standard node-based connectivity by accounting for
+# multiple degrees of freedom per node e.g., 3 DOFs for vector-valued problems.
+#
+# Example (n_x = 3, n_y = 3, dofs_per_node = 3):
+# ----------------------------------------------
+#   Global node numbering:
+#        6 --- 7 --- 8
+#        |     |     |
+#        3 --- 4 --- 5
+#        |     |     |
+#        0 --- 1 --- 2
+#
+#   Node connectivity for each element (0-based):
+#       Element 0: [0, 1, 4, 3]
+#       Element 1: [1, 2, 5, 4]
+#       Element 2: [3, 4, 7, 6]
+#       Element 3: [4, 5, 8, 7]
+#
+#   DOF connectivity for Element 0 (3 DOFs/node):
+#       [0, 1, 2, 3, 4, 5, 12, 13, 14, 9, 10, 11]
+# -------------------------------------------------------------------------
+def build_connectivity_acm(
     n_x: int, n_y: int, dofs_per_node: int = 3, one_based: bool = False
 ):
     """
-    Erzeugt die DOF-Konnektivität für eine Q1-Mesh mit mehreren DOFs pro Knoten.
+    Parameters
+    ----------
+    n_x : int
+        Number of nodes in the horizontal (x) direction.
+    n_y : int
+        Number of nodes in the vertical (y) direction.
+    dofs_per_node : int, optional
+        Number of degrees of freedom per node (default: 3).
+    one_based : bool, optional
+        If True, use 1-based DOF numbering (for Fortran/MATLAB).
+        If False (default), use 0-based numbering (for Python).
 
     Returns
     -------
     elements_dof : list[list[int]]
-        Liste von Elementen; jedes Element enthält die globalen DOF-Indizes.
+        Connectivity list of global DOF indices for each element.
+        Each sublist has length = 4 * dofs_per_node.
     N_nodes : int
-        Anzahl der Knoten.
+        Total number of global nodes (n_x * n_y).
     N_dofs : int
-        Gesamtanzahl der DOFs im globalen System.
+        Total number of global DOFs (N_nodes * dofs_per_node).
     """
+
+    # --- Step 1: build standard 4-node Q1 connectivity ---
     elements, N_nodes = build_connectivity(n_x, n_y, one_based=False)
+    # --- Step 2: expand to DOF connectivity ---
     elements_dof = []
 
-    for conn in elements:  # conn = Liste von Knotenindizes
+    for conn in elements:
         dofs = []
         for node in conn:
+            # Each node contributes 'dofs_per_node' global DOFs
             base = node * dofs_per_node
+            # DOF indices for this node
             dofs.extend([base + d for d in range(dofs_per_node)])
         elements_dof.append(dofs)
-
+    # --- Step 3: total number of DOFs ---
     N_dofs = N_nodes * dofs_per_node
-
+    # --- Step 4: convert to 1-based indexing if requested ---
     if one_based:
         elements_dof = [[d + 1 for d in elem] for elem in elements_dof]
 
     return elements_dof, N_nodes, N_dofs
-
-
-# print(build_connectivity_dofs(3, 3, dofs_per_node=3, one_based=False))

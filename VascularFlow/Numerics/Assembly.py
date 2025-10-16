@@ -21,7 +21,6 @@ from numpy import ndarray
 from VascularFlow.Numerics.BasisFunctions import (
     BasisFunction,
     ACMShapeFunctions,
-    BilinearShapeFunctions,
 )
 from VascularFlow.Numerics.ElementMatrices import (
     element_matrices_or_vectors_2d,
@@ -29,7 +28,7 @@ from VascularFlow.Numerics.ElementMatrices import (
 )
 from VascularFlow.Numerics.Connectivity2D import (
     build_connectivity,
-    build_connectivity_dofs,
+    build_connectivity_acm,
 )
 
 
@@ -181,183 +180,69 @@ def assemble_global_matrices_vectors_2d(
     return K, M, F, n_y
 
 
-def global_matrices_vectors_2d_acm(
+def assemble_global_matrices_vectors_2d_acm(
     shape_function,
-    l: float,
-    h: float,
+    domain_length: float,
+    domain_height: float,
     n_x: int,
+    n_y: int,
     nb_quad_pts_2d: int = 9,
-    source_func: callable = None,
 ):
     """
-    Assemble the global stiffness matrix K
-    and global source vector F for a structured 2D rectangular mesh
-    of four-node ACM (Q1) elements.
+    Assemble the global stiffness matrix K, and global source vector F
+    for a structured 2D rectangular mesh
+    of four-node acm elements.
 
     Parameters
     ----------
     shape_function : ShapeFunction
-        Instance of a shape function class implementing `.eval()` and `.first_derivative()`.
-    l : float
+        Instance of a shape function class implementing `.eval()` and `.second_derivative()`.
+    domain_length : float
         Length of the rectangular domain in the x-direction.
-    h : float
+    domain_height : float
         Height of the rectangular domain in the y-direction.
     n_x : int
         Number of nodes in the horizontal (x) direction.
+    n_y : int
+        Number of nodes in the vertical (y) direction.
     nb_quad_pts_2d : int, optional
         Number of 2D Gaussian quadrature points (default: 9).
-    source_func : callable, optional
-        Source term function f(ξ, η), takes two arguments (local coordinates).
-        If None, the source vector will be zero.
 
     Returns
     -------
-    Kxx : np.ndarray
-        Global stiffness matrix (x-direction) of shape (N_nodes, N_nodes).
-    Kyy : np.ndarray
-        Global stiffness matrix (y-direction) of shape (N_nodes, N_nodes).
-    Kxy : np.ndarray
-        Global stiffness matrix (xy-direction) of shape (N_nodes, N_nodes).
+    K : np.ndarray
+        Global stiffness matrix of shape (N_dofs, N_dofs).
     F : np.ndarray
-        Global source vector of shape (N_nodes,).
-    elements : list[list[int]]
-        Element connectivity list, where each sub-list contains
-        the 4 global node indices for that element.
+        Global source vector of shape (N_dofs,).
     """
 
     # Element width in x-direction
-    dx = l / (n_x - 1)
+    dx = domain_length / (n_x - 1)
 
-    # Number of nodes in y-direction (for a structured 2D rectangular mesh dx = dy)
-    # n_y = int(h / dx) + 1
-    n_y = n_x  # For square elements, n_y = n_x
+    # Element width in x-direction
+    dy = domain_height / (n_y - 1)
+
     # Build element connectivity
-    dofs_per_node = 3  # For ACM shape functions, each node has 3 degrees of freedom
-    elements, N_nodes = build_connectivity(n_x, n_y, one_based=False)
-    element_dofs, N_nodes, N_dofs = build_connectivity_dofs(
-        n_x, n_y, dofs_per_node=dofs_per_node, one_based=False
-    )
+    elements_dof, N_nodes, N_dofs = build_connectivity_acm(n_x, n_y, one_based=False)
 
     # For uniform mesh with constant coefficients, local matrices are identical → compute once
-    K_xx, K_yy, K_xy, F_e = element_matrices_or_vectors_acm_2d(
-        shape_function, nb_quad_pts_2d, dx, source_func=source_func
-    )
+    K_e = element_matrices_or_vectors_acm_2d(
+        shape_function, nb_quad_pts_2d, dx, dy
+    )[0]
+    F_e = element_matrices_or_vectors_acm_2d(
+        shape_function, nb_quad_pts_2d, dx, dy
+    )[1]
 
     # Initialize global matrices and vector
-    Kxx = np.zeros((N_dofs, N_dofs))
-    Kyy = np.zeros((N_dofs, N_dofs))
-    Kxy = np.zeros((N_dofs, N_dofs))
+    K = np.zeros((N_dofs, N_dofs))
     F = np.zeros(N_dofs)
 
     # Assembly process
-    for conn in element_dofs:  # Loop over all elements
-        # print(f"conn: {conn}")  # Debugging line to check connectivity
+    for conn in elements_dof:  # Loop over all elements
         # conn: [bottom-left, bottom-right, top-right, top-left] (0-based global indices)
         for a, I in enumerate(conn):  # Local row index a maps to global row I
-            # print(f"Local row index a: {a}, Global row index I: {I}")  # Debugging line to check indices
             F[I] += F_e[a]  # Add local source term to global vector
             for b, J in enumerate(conn):  # Local col index b maps to global col J
-                # print(f"Local col index b: {b}, Global col index J: {J}")  # Debugging line to check indices
-                Kxx[I, J] += K_xx[a, b]
-                Kyy[I, J] += K_yy[a, b]
-                Kxy[I, J] += K_xy[a, b]
+                K[I, J] += K_e[a, b]
 
-    return Kxx, Kyy, Kxy, F, elements
-
-
-if __name__ == "__main__":
-    # Example usage
-    n_x = 20  # Number of nodes in x-direction
-    nx, ny = 20, 20  # 3 Knoten in x, 3 in y
-    w, l = 200 * 10**-6, 1000 * 10**-6  # Width and length of the plate
-    # w, l = 10.0, 50.0 # Width and length of the plate
-    h = 20 * 10**-6  # Thickness of the plate
-    E = 2 * 10**6
-    nu = 0.3
-    q = 1.5 * 10**-9
-    v = q / (h * w)
-    phi = 1000
-    D = 2 * E * h**3 / (3 * (1 - nu**2))
-    kxx_global, kyy_global, kxy_global, f_global, elements = (
-        global_matrices_vectors_2d_acm(
-            shape_function=ACMShapeFunctions(),
-            l=l,
-            h=w,
-            n_x=n_x,
-            nb_quad_pts_2d=9,
-            source_func=lambda x, y: 1000e11
-        )
-    )
-    k_total = kxx_global + kyy_global + kxy_global
-
-    for i in range(3 * n_x**2):
-        # bottom wall
-        if i < 3 * n_x:
-            k_total[i, :] = 0.0
-            f_global[i] = 0.0
-            k_total[i, i] = 1.0
-        # left wall
-        #if i % (3 * n_x) == 0:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        #if i % ((3 * n_x)) == 1:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        #if i % ((3 * n_x)) == 2:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        # right wall
-        #if i % (3 * n_x) == 3 * n_x - 1:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        #if i % (3 * n_x) == 3 * n_x - 2:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        #if i % (3 * n_x) == 3 * n_x - 3:
-        #    k_total[i, :] = 0.0
-        #    f_global[i] = 0.0
-        #    k_total[i, i] = 1.0
-        # top wall
-        if i > 3 * n_x * (n_x - 1):
-            k_total[i, :] = 0.0
-            f_global[i] = 0.0
-            k_total[i, i] = 1.0
-    sol = np.linalg.solve(k_total, f_global)
-    #w_tilde = sol
-    #sol = w_tilde/h
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-def plot_fem_solution_2d(sol, nx, ny, w, l, dof=0, levels=50, title="FEM solution (2D)"):
-
-    Z = sol[dof::3].reshape(ny, nx)
-
-    # coordinates
-    x = np.linspace(0, w, nx)
-    y = np.linspace(0, l, ny)
-    X, Y = np.meshgrid(x, y, indexing="xy")
-
-    # plot
-    plt.figure(figsize=(6.5, 5.5))
-    cf = plt.contourf(X, Y, Z, levels=levels, cmap="viridis")
-    #plt.xlabel("x")
-    #plt.ylabel("y")
-    #plt.title(title)
-    plt.gca().set_aspect("equal")
-    cbar = plt.colorbar(cf)
-    cbar.set_label("Field value")
-    plt.tight_layout()
-    plt.show()
-
-# Example call (plots the first DOF per node):
-plot_fem_solution_2d(sol, nx, ny, w, l, dof=0, levels=60)
-
-
-
-
+    return K, F

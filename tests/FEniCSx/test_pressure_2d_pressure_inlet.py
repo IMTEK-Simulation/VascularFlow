@@ -6,6 +6,7 @@ import dolfinx
 
 from VascularFlow.FEniCSx.FluidFlow.Pressure2DPressureInlet import (
     pressure_2d_pressure_inlet,
+    pressure_3d_pressure_inlet,
 )
 from VascularFlow.FEniCSx.PostProcessing.VisualizdMixed import visualize_mixed
 from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import mesh_deformation
@@ -103,3 +104,27 @@ def test_navier_stokes_problem_pressure_inlet(
             outlet_coordinate,
             title="Interface Pressure Profile",
         )
+
+
+def test_pressure_3d_pressure_inlet():
+    n_x = 5
+    n_y = 5
+    n_z = 5
+
+    mixed_function, interface_pressure = pressure_3d_pressure_inlet(
+        fluid_domain_x_max_coordinate=1,
+        fluid_domain_y_max_coordinate=1,
+        fluid_domain_z_max_coordinate=1,
+        n_x=n_x,
+        n_y=n_y,
+        n_z=n_z,
+        reynolds_number=2,
+        inlet_pressure=8,
+    )
+
+    fluid_domain = dolfinx.mesh.create_unit_cube(
+        MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=dolfinx.mesh.CellType.hexahedron
+    )
+
+    visualize_mixed(mixed_function, fluid_domain)
+    print(interface_pressure)

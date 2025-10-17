@@ -203,19 +203,21 @@ def pressure_2d_pressure_inlet(
         # Solve the nonlinear problem
         log.set_log_level(log.LogLevel.WARNING)
         n, converged = newton_solver.solve(wh)
-        print(f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}")
+        print(
+            f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}"
+        )
 
     else:
         # Defining the source term and reynolds number over the fluid domain
         f = dolfinx.fem.Constant(fluid_domain, dolfinx.default_scalar_type((0, 0)))
 
         # Variational form
-        F = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx # Diffusion term
+        F = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx  # Diffusion term
         F -= ufl.dot(ufl.grad(u) * n, v) * ds
-        F -= ufl.inner(p, ufl.div(v)) * ufl.dx # Pressure gradient
+        F -= ufl.inner(p, ufl.div(v)) * ufl.dx  # Pressure gradient
         F += ufl.dot(p * n, v) * ds
-        F += ufl.inner(ufl.div(u), q) * ufl.dx # Continuity equation
-        F -= ufl.inner(f, v) * ufl.dx # Source term
+        F += ufl.inner(ufl.div(u), q) * ufl.dx  # Continuity equation
+        F -= ufl.inner(f, v) * ufl.dx  # Source term
         a, L = ufl.system(F)
 
         # Compile the bi-linear and linear forms for assembly
@@ -256,3 +258,223 @@ def pressure_2d_pressure_inlet(
     interface_pressure = interface_pressure_values[sorted_indices]
 
     return wh, interface_pressure
+
+
+def pressure_3d_pressure_inlet(
+    fluid_domain_x_max_coordinate: float,
+    fluid_domain_y_max_coordinate: float,
+    fluid_domain_z_max_coordinate: float,
+    n_x: int,
+    n_y: int,
+    n_z: int,
+    reynolds_number: float,
+    inlet_pressure: float,
+):
+    """
+    Solve steady incompressible Navier–Stokes in a 3D rectangular duct with
+    a pressure inlet/outlet and no-slip walls, then return the mixed solution
+    and a 1D vector of pressure values on the top face (z = Lz) sorted row-wise.
+
+    Boundary conditions
+    -------------------
+    - Inlet  (x = Lx): p = inlet_pressure  (Dirichlet on pressure)
+    - Outlet (x = 0) : p = 0               (Dirichlet on pressure)
+    - Walls  (z = 0, z = Lz, y = 0, y = Ly): u = 0 (no-slip velocity)
+
+    Discretization
+    --------------
+    - Mesh: hexahedral unit cube scaled to [0,Lx]×[0,Ly]×[0,Lz], with (n_x, n_y, n_z) cells.
+    - Elements: Taylor–Hood (Q2 for velocity, Q1 for pressure) via Basix.
+    - Nonlinear solve: Newton with LU (MUMPS).
+
+    Returned top-face pressure ordering
+    -----------------------------------
+    `interface_pressure_values_sorted` is concatenated row-by-row in this order:
+      for y in [Ly, Ly - Δy, ..., 0]:    # descending y
+        for x in [Lx, Lx - Δx, ..., 0]:  # descending x
+          append p(x, y, z=Lz)
+    where Δx = Lx/n_x and Δy = Ly/n_y. Each row is first sorted by x (descending).
+
+    Parameters
+    ----------
+    fluid_domain_x_max_coordinate, fluid_domain_y_max_coordinate, fluid_domain_z_max_coordinate : float
+        Physical domain extents (Lx, Ly, Lz).
+    n_x, n_y, n_z : int
+        Number of hexahedral cells in x, y, z.
+    reynolds_number : float
+        Reynolds number used in the weak form (dimensionless).
+    inlet_pressure : float
+        Imposed pressure value at the inlet boundary (x = Lx).
+
+    Returns
+    -------
+    wh : dolfinx.fem.Function
+        Mixed solution in W = [Q2]^3 × Q1; `wh.sub(0)` is velocity, `wh.sub(1)` is pressure.
+    interface_pressure_values_sorted : np.ndarray
+        1D array of length (n_y+1) * (n_x+1) with top-face (z=Lz) pressure
+        values sorted as described above.
+    """
+
+    # --- Build and scale a hexahedral unit-cube mesh ---
+    fluid_domain = dolfinx.mesh.create_unit_cube(
+        MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=dolfinx.mesh.CellType.hexahedron
+    )
+
+    # Scale the mesh geometry
+    fluid_domain.geometry.x[:, 0] *= fluid_domain_x_max_coordinate
+    fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
+    fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
+
+    # --- Taylor–Hood mixed element: Q2 velocity (vector), Q1 pressure (scalar) ---
+    el_u = basix.ufl.element(
+        "Lagrange",
+        fluid_domain.topology.cell_name(),
+        2,
+        shape=(fluid_domain.geometry.dim,),
+    )
+    el_p = basix.ufl.element("Lagrange", fluid_domain.topology.cell_name(), 1)
+    el_mixed = basix.ufl.mixed_element([el_u, el_p])
+
+    W = dolfinx.fem.functionspace(fluid_domain, el_mixed)
+    u, p = ufl.TrialFunctions(W)
+    v, q = ufl.TestFunctions(W)
+
+    ds = ufl.Measure("ds", domain=fluid_domain)
+    n = ufl.FacetNormal(fluid_domain)
+
+    # Velocity subspace handle (W.sub(0)); V is the collapsed scalar space for applying BCs
+    W0 = W.sub(0)
+    V, _ = W0.collapse()
+
+    # Mixed unknown function (for nonlinear solve)
+    wh = dolfinx.fem.Function(W)
+    uh, ph = ufl.split(wh)
+
+    # --- Boundary marking: inlet (x=Lx), outlet (x=0), bottom (z=0), top (rest of exterior minus inlet/outlet/bottom)
+    fluid_domain.topology.create_connectivity(
+        fluid_domain.topology.dim - 1, fluid_domain.topology.dim
+    )
+
+    def inlet_marker(x):
+        return np.isclose(x[0], fluid_domain_x_max_coordinate)
+
+    inlet_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
+    )
+
+    def outlet_marker(x):
+        return np.isclose(x[0], 0)
+
+    outlet_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, outlet_marker
+    )
+
+    def bottom_marker(x):
+        return np.isclose(x[2], 0)
+
+    bottom_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, bottom_marker
+    )
+
+    all_boundary_facets = dolfinx.mesh.exterior_facet_indices(fluid_domain.topology)
+    # Top facets = everything else on the exterior (used for no-slip on velocity)
+    top_facet = np.setdiff1d(
+        all_boundary_facets,
+        np.unique(np.concatenate((inlet_facet, outlet_facet, bottom_facet))),
+    )
+    # --- Pressure Dirichlet BCs: inlet/outlet pressures on W.sub(1) ---
+    p_inlet = dolfinx.fem.Constant(
+        fluid_domain, dolfinx.default_scalar_type(inlet_pressure)
+    )
+    dofs_inlet = dolfinx.fem.locate_dofs_topological(
+        W.sub(1), fluid_domain.topology.dim - 1, inlet_facet
+    )
+    bc_inlet = dolfinx.fem.dirichletbc(p_inlet, dofs_inlet, W.sub(1))
+
+    p_outlet = dolfinx.fem.Constant(fluid_domain, dolfinx.default_scalar_type(0))
+    dofs_outlet = dolfinx.fem.locate_dofs_topological(
+        W.sub(1), fluid_domain.topology.dim - 1, outlet_facet
+    )
+    bc_outlet = dolfinx.fem.dirichletbc(p_outlet, dofs_outlet, W.sub(1))
+    # --- Velocity no-slip on bottom and top walls: u = 0 on W.sub(0) ---
+    u_wall = dolfinx.fem.Function(V)
+    u_wall.x.array[:] = 0
+    dofs_wall_bottom = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, bottom_facet
+    )
+    bc_wall_bottom = dolfinx.fem.dirichletbc(u_wall, dofs_wall_bottom, W0)
+
+    dofs_wall_top = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, top_facet
+    )
+    bc_wall_top = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top, W0)
+    bcs = [bc_inlet, bc_outlet, bc_wall_bottom, bc_wall_top]
+    # --- Reynolds number parameter ---
+    Re = dolfinx.fem.Constant(
+        fluid_domain, dolfinx.default_scalar_type(reynolds_number)
+    )
+
+    # --- Weak form of steady NS (do-nothing form for pressure BCs via +∫ p n·v ds) ---
+    F = ufl.inner(ufl.grad(uh) * uh, v) * ufl.dx  # Convective term
+    F += ((1 / Re) * ufl.inner(ufl.grad(uh), ufl.grad(v))) * ufl.dx  # Diffusion term
+    F -= ufl.inner(ph, ufl.div(v)) * ufl.dx  # Pressure gradient
+    F += ufl.dot(ph * n, v) * ds  # Weak imposition of Dirichlet conditions
+    F += ufl.inner(ufl.div(uh), q) * ufl.dx  # Continuity equation
+
+    # Create the nonlinear problem
+    problem = NonlinearProblem(F, wh, bcs)
+    # Create the Newton solver
+    newton_solver = NewtonSolver(MPI.COMM_WORLD, problem)
+    # Set the Newton solver parameters
+    newton_solver.convergence_criterion = "incremental"
+    newton_solver.rtol = 1e-6
+    # newton_solver.max_it = 100
+    newton_solver.report = False
+    # Modify the linear solver in each Newton iteration
+    ksp = newton_solver.krylov_solver
+    opts = PETSc.Options()
+    option_prefix = ksp.getOptionsPrefix()
+    opts[f"{option_prefix}ksp_type"] = "preonly"
+    opts[f"{option_prefix}pc_type"] = "lu"
+    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
+    ksp.setFromOptions()
+    # Solve the nonlinear problem
+    log.set_log_level(log.LogLevel.WARNING)
+    n, converged = newton_solver.solve(wh)
+    print(
+        f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}"
+    )
+
+    # --- Extract and sort pressure on the top face (z = Lz) ---
+    pressure_field = wh.sub(1).collapse()
+    Q = pressure_field.function_space
+
+    hx = fluid_domain_x_max_coordinate / n_x # grid step in x
+    eps = 1e-12
+
+    # y-levels: 1, 0.9, ..., 0  (ny+1 points)
+    y_levels = np.linspace(fluid_domain_y_max_coordinate, 0.0, n_y + 1)
+
+    rows = []
+    dof_coords_all = Q.tabulate_dof_coordinates() # cache to avoid re-computation
+
+    for yi in y_levels:
+        # Select top-edge dofs on the plane z = Lz at the current y = yi
+        edge_dofs = dolfinx.fem.locate_dofs_geometrical(
+            Q,
+            lambda x: np.isclose(x[2], fluid_domain_z_max_coordinate, atol=eps)
+            & np.isclose(x[1], yi, atol=eps),
+        )
+
+        # Order this row by x descending (1 → 0); snap x to grid to avoid jitter
+        edge_coords = dof_coords_all[edge_dofs]
+        xr = np.round(edge_coords[:, 0] / hx) * hx
+        order = np.argsort(-xr)  # descending x
+
+        row_vals = pressure_field.x.array[edge_dofs][order]
+        rows.append(row_vals)
+
+    # Concatenate rows: y = Ly first row, …, y = 0 last row
+    interface_pressure_values_sorted = np.concatenate(rows)
+
+    return wh, interface_pressure_values_sorted

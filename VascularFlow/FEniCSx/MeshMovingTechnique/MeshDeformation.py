@@ -21,6 +21,7 @@ Boundary conditions:
 """
 
 from dolfinx import mesh, fem, default_scalar_type
+from mpi4py import MPI
 import numpy as np
 import ufl
 from dolfinx.fem.petsc import LinearProblem
@@ -32,7 +33,6 @@ def mesh_deformation(
     fluid_domain_x_max_coordinate: int,
     fluid_domain: mesh.Mesh,
     harmonic_extension: bool,
-
 ):
     """
     Extend displacement of the FSI interface into the fluid domain by means of:
@@ -71,7 +71,11 @@ def mesh_deformation(
 
     # Defining dirichlet boundary conditions
     def walls_rest(x):
-        return np.isclose(x[0], 0) | np.isclose(x[0], fluid_domain_x_max_coordinate) | np.isclose(x[1], 0)
+        return (
+            np.isclose(x[0], 0)
+            | np.isclose(x[0], fluid_domain_x_max_coordinate)
+            | np.isclose(x[1], 0)
+        )
 
     tdim = fluid_domain.topology.dim
     fdim = tdim - 1
@@ -129,13 +133,15 @@ def mesh_deformation(
         f = fem.Constant(fluid_domain, default_scalar_type(0))
 
         a = (
-                ufl.inner(ufl.div(ufl.grad(u)), ufl.div(ufl.grad(v))) * ufl.dx
-                - ufl.inner(ufl.avg(ufl.div(ufl.grad(u))), ufl.jump(ufl.grad(v), n)) * ufl.dS
-                - ufl.inner(ufl.jump(ufl.grad(u), n), ufl.avg(ufl.div(ufl.grad(v)))) * ufl.dS
-                + alpha
-                / h_avg
-                * ufl.inner(ufl.jump(ufl.grad(u), n), ufl.jump(ufl.grad(v), n))
-                * ufl.dS
+            ufl.inner(ufl.div(ufl.grad(u)), ufl.div(ufl.grad(v))) * ufl.dx
+            - ufl.inner(ufl.avg(ufl.div(ufl.grad(u))), ufl.jump(ufl.grad(v), n))
+            * ufl.dS
+            - ufl.inner(ufl.jump(ufl.grad(u), n), ufl.avg(ufl.div(ufl.grad(v))))
+            * ufl.dS
+            + alpha
+            / h_avg
+            * ufl.inner(ufl.jump(ufl.grad(u), n), ufl.jump(ufl.grad(v), n))
+            * ufl.dS
         )
         L = ufl.inner(f, v) * ufl.dx
 
@@ -144,8 +150,140 @@ def mesh_deformation(
         )
         w_a = problem.solve()
 
-
     # Applying the vertical movement in y-direction
     x = fluid_domain.geometry.x
     x[:, 1] += w_a.x.array
+    return fluid_domain
+
+
+def mesh_deformation_3d(
+    interface_displacement: np.ndarray,
+    fluid_domain_x_max_coordinate: float,
+    fluid_domain_y_max_coordinate: float,
+    fluid_domain_z_max_coordinate: float,
+    n_x: int,
+    n_y: int,
+    n_z: int,
+):
+    """
+    Build a hexahedral unit-cube mesh, scale it to a rectangular prism, and
+    solve a harmonic extension problem (Laplace’s equation) to vertically
+    displace the mesh using a user-specified Dirichlet profile on the top face.
+
+    The scalar field u is then extended into the volume by solving
+        -Δu = 0 in Ω,  u|∂Ω as above,
+        and the mesh geometry is updated by adding u to the z-coordinate.
+
+    Parameters
+    ----------
+    interface_displacement : np.ndarray
+        Flattened array of length (n_y + 1) * (n_x + 1) containing the
+        prescribed values on the top face DOFs of a CG1 space. The values
+        must be ordered as:
+            for y in [Ly, Ly - Δy, ..., 0]:
+                for x in [Lx, Lx - Δx, ..., 0]:
+                    append u(x, y)
+        where Δx = Lx / n_x and Δy = Ly / n_y.
+        (I.e., first row is y = Ly with x descending; last row is y = 0.)
+    fluid_domain_x_max_coordinate : float
+        Physical length in the x-direction (Lx).
+    fluid_domain_y_max_coordinate : float
+        Physical length in the y-direction (Ly).
+    fluid_domain_z_max_coordinate : float
+        Physical length in the z-direction (Lz).
+    n_x, n_y, n_z : int
+        Number of cells in x, y, z when creating the unit cube. The mesh
+        is hexahedral.
+
+    Returns
+    -------
+    dolfinx.mesh.Mesh
+        The deformed mesh. Only the z-coordinates are modified in-place:
+        X[:, 2] ← X[:, 2] + u.
+    """
+
+    # Create a unit-cube hex mesh and scale it to the requested box
+    fluid_domain = mesh.create_unit_cube(
+        MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=mesh.CellType.hexahedron
+    )
+
+    fluid_domain.geometry.x[:, 0] *= fluid_domain_x_max_coordinate
+    fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
+    fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
+
+    tdim = fluid_domain.topology.dim
+    fdim = tdim - 1
+    fluid_domain.topology.create_connectivity(tdim, tdim)
+
+    # Scalar CG1 space for the harmonic extension
+    displacement_function_space = functionspace(fluid_domain, ("Lagrange", 1))
+
+    # Identify all boundary facets except the top face (z = Lz) → these are "rest" (fixed)
+    def walls_rest(x):
+        return (
+            np.isclose(x[0], 0)
+            | np.isclose(x[0], fluid_domain_x_max_coordinate)
+            | np.isclose(x[1], 0)
+            | np.isclose(x[1], fluid_domain_y_max_coordinate)
+            | np.isclose(x[2], 0)
+        )
+
+    facets_rest = mesh.locate_entities_boundary(fluid_domain, fdim, walls_rest)
+    all_boundary_facets = mesh.exterior_facet_indices(fluid_domain.topology)
+    facet_top = np.setdiff1d(all_boundary_facets, facets_rest)
+
+    # Dirichlet DOFs on the non-top boundary (fixed to zero)
+    boundary_dofs_rest = fem.locate_dofs_topological(
+        displacement_function_space, fdim, facets_rest
+    )
+
+    # ---- Collect top-face DOFs in the exact order the user array expects ----
+    # y-levels: Ly → 0, at step Δy; on each level, we pick edge DOFs with z = Lz,
+    # and later assign values in x-descending order via the input array layout.
+    rows = []
+    y_levels = np.linspace(fluid_domain_y_max_coordinate, 0.0, n_y + 1)
+    for yi in y_levels:
+        edge_dofs = fem.locate_dofs_geometrical(
+            displacement_function_space,
+            lambda x: np.isclose(x[2], fluid_domain_z_max_coordinate, atol=1e-12)
+            & np.isclose(x[1], yi, atol=1e-12),
+        )
+        rows.append(edge_dofs)
+
+    # Concatenate rows: (y=Ly row), then (y=Ly-Δy), …, (y=0 row)
+    sorted_boundary_dofs_top = np.concatenate(rows)
+
+    # Sanity-check the size matches the provided array length
+    expected = (n_x + 1) * (n_y + 1)
+    assert (
+        interface_displacement.size == expected
+    ), f"interface_displacement has length {interface_displacement.size}, expected {expected}"
+
+    # Build Dirichlet data: zeros everywhere, custom values on top DOFs
+    bc_rest = fem.dirichletbc(
+        default_scalar_type(0), boundary_dofs_rest, displacement_function_space
+    )
+    top_wall_bc_value = fem.Function(displacement_function_space)
+    # Assign user-specified top values in the requested order
+    for dof, value in zip(sorted_boundary_dofs_top, interface_displacement):
+        top_wall_bc_value.x.array[dof] = value
+    bc_top = fem.dirichletbc(top_wall_bc_value, sorted_boundary_dofs_top)
+    bc = [bc_top, bc_rest]
+
+    # Variational problem: -Δu = 0 with Dirichlet BCs
+    u = ufl.TrialFunction(displacement_function_space)
+    v = ufl.TestFunction(displacement_function_space)
+    lhs = ufl.dot(ufl.grad(u), ufl.grad(v)) * ufl.dx
+    rhs = fem.Constant(fluid_domain, default_scalar_type(0)) * v * ufl.dx
+
+    # Solve Laplace problem
+    problem = LinearProblem(
+        lhs, rhs, bcs=bc, petsc_options={"ksp_type": "preonly", "pc_type": "lu"}
+    )
+    w_a = problem.solve()
+
+    # Update mesh geometry by adding u to z-coordinate (vertical displacement)
+    x = fluid_domain.geometry.x
+    x[:, 2] += w_a.x.array
+
     return fluid_domain

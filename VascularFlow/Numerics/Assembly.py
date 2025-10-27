@@ -17,6 +17,7 @@ Basis function types:
 
 import numpy as np
 from numpy import ndarray
+import scipy.sparse as scysparse
 
 from VascularFlow.Numerics.BasisFunctions import (
     BasisFunction,
@@ -234,7 +235,8 @@ def assemble_global_matrices_vectors_2d_acm(
     )[1]
 
     # Initialize global matrices and vector
-    K = np.zeros((N_dofs, N_dofs))
+    #K = np.zeros((N_dofs, N_dofs))
+    K = scysparse.lil_matrix((N_dofs, N_dofs), dtype=np.float64)
     F = np.zeros(N_dofs)
 
     # Assembly process

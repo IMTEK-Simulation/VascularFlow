@@ -333,7 +333,7 @@ def element_matrices_or_vectors_acm_2d(
                 grad = shape_func.second_derivative(s, n)
                 # Map second derivatives to physical coordinates:
                 # ∇²φ_phys = J^{-T} · ∇²φ_ref · J^{-1}
-                grad_hat = grad @ J_inv_T
+                grad_hat = J_inv_T @ grad @ J_inv
                 return (np.sum(grad_hat[i] * grad_hat[j])) * detJ
 
             k[i, j] = integrate_over_square(integrand, nb_quad_pts_2d)

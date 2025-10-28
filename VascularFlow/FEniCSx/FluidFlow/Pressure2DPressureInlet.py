@@ -261,7 +261,8 @@ def pressure_2d_pressure_inlet(
 
 
 def pressure_3d_pressure_inlet(
-    fluid_domain_x_max_coordinate: float,
+    fluid_domain_x_inlet_coordinate: float,
+    fluid_domain_x_outlet_coordinate: float,
     fluid_domain_y_max_coordinate: float,
     fluid_domain_z_max_coordinate: float,
     n_x: int,
@@ -297,8 +298,12 @@ def pressure_3d_pressure_inlet(
 
     Parameters
     ----------
-    fluid_domain_x_max_coordinate, fluid_domain_y_max_coordinate, fluid_domain_z_max_coordinate : float
-        Physical domain extents (Lx, Ly, Lz).
+    fluid_domain_x_inlet_coordinate: float
+        The x-coordinate specifying the inlet position of the  fluid domain.
+    fluid_domain_x_outlet_coordinate: float
+        The x-coordinate specifying the outlet position of the fluid domain.
+    fluid_domain_y_max_coordinate, fluid_domain_z_max_coordinate : float
+        Physical domain extents in y and z coordinates (Ly, Lz).
     n_x, n_y, n_z : int
         Number of hexahedral cells in x, y, z.
     reynolds_number : float
@@ -321,7 +326,7 @@ def pressure_3d_pressure_inlet(
     )
 
     # Scale the mesh geometry
-    fluid_domain.geometry.x[:, 0] *= fluid_domain_x_max_coordinate
+    fluid_domain.geometry.x[:, 0] *= max(fluid_domain_x_inlet_coordinate, fluid_domain_x_outlet_coordinate)
     fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
     fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
 
@@ -356,7 +361,7 @@ def pressure_3d_pressure_inlet(
     )
 
     def inlet_marker(x):
-        return np.isclose(x[0], fluid_domain_x_max_coordinate)
+        return np.isclose(x[0], fluid_domain_x_inlet_coordinate)
 
     inlet_facet = dolfinx.mesh.locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
@@ -449,7 +454,7 @@ def pressure_3d_pressure_inlet(
     pressure_field = wh.sub(1).collapse()
     Q = pressure_field.function_space
 
-    hx = fluid_domain_x_max_coordinate / n_x # grid step in x
+    hx = max(fluid_domain_x_inlet_coordinate, fluid_domain_x_outlet_coordinate) / n_x # grid step in x
     eps = 1e-12
 
     # y-levels: 1, 0.9, ..., 0  (ny+1 points)

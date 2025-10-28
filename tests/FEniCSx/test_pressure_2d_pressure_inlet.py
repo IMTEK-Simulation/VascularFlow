@@ -107,14 +107,19 @@ def test_navier_stokes_problem_pressure_inlet(
 
 
 def test_pressure_3d_pressure_inlet():
-    n_x = 5
-    n_y = 5
-    n_z = 5
+    fluid_domain_x_inlet_coordinate = 3
+    fluid_domain_x_outlet_coordinate = 0
+    fluid_domain_y_max_coordinate = 1
+    fluid_domain_z_max_coordinate = 1
+    n_x = 30
+    n_y = 10
+    n_z = 10
 
     mixed_function, interface_pressure = pressure_3d_pressure_inlet(
-        fluid_domain_x_max_coordinate=1,
-        fluid_domain_y_max_coordinate=1,
-        fluid_domain_z_max_coordinate=1,
+        fluid_domain_x_inlet_coordinate=fluid_domain_x_inlet_coordinate,
+        fluid_domain_x_outlet_coordinate=fluid_domain_x_outlet_coordinate,
+        fluid_domain_y_max_coordinate=fluid_domain_y_max_coordinate,
+        fluid_domain_z_max_coordinate=fluid_domain_z_max_coordinate,
         n_x=n_x,
         n_y=n_y,
         n_z=n_z,
@@ -126,5 +131,10 @@ def test_pressure_3d_pressure_inlet():
         MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=dolfinx.mesh.CellType.hexahedron
     )
 
+    # Scale the mesh geometry
+    fluid_domain.geometry.x[:, 0] *= max(fluid_domain_x_inlet_coordinate, fluid_domain_x_outlet_coordinate)
+    fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
+    fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
+
     visualize_mixed(mixed_function, fluid_domain)
-    print(interface_pressure)
+    #print(interface_pressure)

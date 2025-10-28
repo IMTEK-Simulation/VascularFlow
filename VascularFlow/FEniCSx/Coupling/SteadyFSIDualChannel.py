@@ -20,11 +20,17 @@ import numpy as np
 from mpi4py import MPI
 
 from VascularFlow.FEniCSx.FluidFlow.Pressure2DPressureInlet import (
-    pressure_2d_pressure_inlet, pressure_3d_pressure_inlet,
+    pressure_2d_pressure_inlet,
+    pressure_3d_pressure_inlet,
 )
 from VascularFlow.FEniCSx.Elasticity.Beam import euler_bernoulli_steady_fenicsx
+
+
 from VascularFlow.Examples2D.KirchhoffLovePlate import plate_bending_acm_2d
-from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import mesh_deformation, mesh_deformation_3d
+from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import (
+    mesh_deformation,
+    mesh_deformation_3d,
+)
 
 
 def two_dimensional_steady_fsi_dual_channel(
@@ -200,7 +206,6 @@ def two_dimensional_steady_fsi_dual_channel(
             under_relaxation_factor * w_star + (1 - under_relaxation_factor) * w_new
         )
 
-
         # --- Step 4: Update fluid meshes using harmonic extension ---
         channel1_domain = dolfinx.mesh.create_rectangle(
             MPI.COMM_WORLD,
@@ -209,7 +214,7 @@ def two_dimensional_steady_fsi_dual_channel(
             cell_type=dolfinx.mesh.CellType.triangle,
         )
         channel1_domain_star = mesh_deformation(
-            -np.array(w_star), # Negative displacement for channel 1
+            -np.array(w_star),  # Negative displacement for channel 1
             50,
             channel1_domain,
             harmonic_extension=True,
@@ -222,7 +227,7 @@ def two_dimensional_steady_fsi_dual_channel(
             cell_type=dolfinx.mesh.CellType.triangle,
         )
         channel2_domain_star = mesh_deformation(
-            np.array(w_star), # Positive displacement for channel 2
+            np.array(w_star),  # Positive displacement for channel 2
             50,
             channel2_domain,
             harmonic_extension=True,
@@ -282,13 +287,21 @@ def two_dimensional_steady_fsi_dual_channel(
         channel2_domain = channel2_domain_star
 
         iteration += 1
-        #print('iteration = ',iteration)
+        # print('iteration = ',iteration)
 
         residual_values.append(residual)
         iteration_indices.append(iteration)
 
     # Final return of converged pressure fields, wall shape, and deformed domains
-    return p_new_1, p_new_2, w_new, channel1_domain, channel2_domain, residual_values, iteration_indices
+    return (
+        p_new_1,
+        p_new_2,
+        w_new,
+        channel1_domain,
+        channel2_domain,
+        residual_values,
+        iteration_indices,
+    )
 
 
 def three_dimensional_steady_fsi_dual_channel(
@@ -410,18 +423,19 @@ def three_dimensional_steady_fsi_dual_channel(
     channel2_domain : dolfinx.mesh.Mesh
         Final deformed mesh for the bottom channel (channel_1).
     """
-
+    # --- Build initial hexahedral meshes for both channels (unit cube) ---
     channel1_domain = dolfinx.mesh.create_unit_cube(
         MPI.COMM_WORLD,
         n_x_fluid_domain,
         n_y_fluid_domain,
         n_z_fluid_domain,
-        cell_type=dolfinx.mesh.CellType.hexahedron
+        cell_type=dolfinx.mesh.CellType.hexahedron,
     )
 
-    # Scale the mesh geometry
+    # Scale channel 1 to its physical extents (x length is inlet→outlet span)
     channel1_domain.geometry.x[:, 0] *= max(
-        fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate)
+        fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate
+    )
     channel1_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
     channel1_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
 
@@ -430,23 +444,24 @@ def three_dimensional_steady_fsi_dual_channel(
         n_x_fluid_domain,
         n_y_fluid_domain,
         n_z_fluid_domain,
-        cell_type=dolfinx.mesh.CellType.hexahedron
+        cell_type=dolfinx.mesh.CellType.hexahedron,
     )
 
-    # Scale the mesh geometry
+    # Scale channel 2 to its physical extents
     channel2_domain.geometry.x[:, 0] *= max(
-        fluid_domain_2_x_inlet_coordinate, fluid_domain_2_x_outlet_coordinate)
+        fluid_domain_2_x_inlet_coordinate, fluid_domain_2_x_outlet_coordinate
+    )
     channel2_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
     channel2_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
-
+    # Initialize convergence tracking
     residual = 1
     iteration = 0
-
     residual_values = []
     iteration_indices = []
-
+    # --- Fixed-point / Gauss–Seidel style FSI loop ---
     while residual > residual_number and iteration < iteration_number:
-
+        # 1) Solve fluid in channel 1 with given inlet pressure and Re.
+        #    Returns the mixed solution and the pressure sampled/sorted on the top face.
         mixed_function1, p1 = pressure_3d_pressure_inlet(
             fluid_domain_1_x_inlet_coordinate,
             fluid_domain_1_x_outlet_coordinate,
@@ -456,9 +471,10 @@ def three_dimensional_steady_fsi_dual_channel(
             n_y_fluid_domain,
             n_z_fluid_domain,
             reynolds_number_channel1,
-            inlet_pressure_channel1)
+            inlet_pressure_channel1,
+        )
 
-        # --- Step 2: Solve fluid pressure in channel 2 ---
+        # 2) Solve fluid in channel 2.
         mixed_function2, p2 = pressure_3d_pressure_inlet(
             fluid_domain_2_x_inlet_coordinate,
             fluid_domain_2_x_outlet_coordinate,
@@ -468,11 +484,15 @@ def three_dimensional_steady_fsi_dual_channel(
             n_y_fluid_domain,
             n_z_fluid_domain,
             reynolds_number_channel2,
-            inlet_pressure_channel2)
+            inlet_pressure_channel2,
+        )
 
-        # --- Step 3: Solve for plate displacement due to differential pressure ---
+        # 3) Plate bending due to differential pressure (p1 on one side, p2 on the other).
+        #    The plate solver returns the global vector with 3 DOFs per node: [w, θx, θy].
+
+        # shape_function = ACMShapeFunctions()
         plate_solution, lhs, rhs = plate_bending_acm_2d(
-            shape_function,
+            plate_shape_function,
             plate_x_max_coordinate,
             plate_y_max_coordinate,
             n_x_plate,
@@ -488,21 +508,23 @@ def three_dimensional_steady_fsi_dual_channel(
             p1,
             p2,
         )
-
+        # Extract transverse displacement w (filter tiny numerical noise)
         w_star = plate_solution[0::3]
         w_star[np.abs(w_star) < 1e-7] = 0
 
-        # Apply under-relaxation to stabilize updates
+        # Under-relax the displacement to stabilize coupling iterations
         w_star = (
-                under_relaxation_factor * w_star + (1 - under_relaxation_factor) * w_new
+            under_relaxation_factor * w_star + (1 - under_relaxation_factor) * w_new
         )
 
-        # --- Step 4: Update fluid meshes using harmonic extension ---
+        # 4) Update fluid meshes by solving Laplace problems with Dirichlet BC on z=Lz.
+        #    Top channel moves opposite to plate deflection on the interface; bottom follows plate.
         fluid_domain_x_max_coordinate = max(
-            fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate)
+            fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate
+        )
 
         channel1_domain_star = mesh_deformation_3d(
-            -w_star,
+            -w_star,  # interface displacement sign convention for channel 1
             fluid_domain_x_max_coordinate,
             fluid_domain_y_max_coordinate,
             fluid_domain_z_max_coordinate,
@@ -512,7 +534,7 @@ def three_dimensional_steady_fsi_dual_channel(
         )
 
         channel2_domain_star = mesh_deformation_3d(
-            w_star,
+            w_star,  # channel 2 moves with the plate
             fluid_domain_x_max_coordinate,
             fluid_domain_y_max_coordinate,
             fluid_domain_z_max_coordinate,
@@ -521,8 +543,12 @@ def three_dimensional_steady_fsi_dual_channel(
             n_z_fluid_domain,
         )
 
-        # --- Step 5: Compute relative residuals for convergence ---
-        if max(abs(channel1_domain.geometry.x[:, 2] - fluid_domain_z_max_coordinate)) < epsilon:
+        # 5) Compute relative residuals for mesh motion and pressure to test convergence.
+        #    Use epsilon safeguards to avoid division by ~0 during early iterations.
+        if (
+            max(abs(channel1_domain.geometry.x[:, 2] - fluid_domain_z_max_coordinate))
+            < epsilon
+        ):
             residual_h_channel1 = max(
                 abs(
                     channel1_domain_star.geometry.x[:, 2]
@@ -537,7 +563,10 @@ def three_dimensional_steady_fsi_dual_channel(
                 )
             ) / max(abs(channel1_domain.geometry.x[:, 2]))
 
-        if max(abs(channel2_domain.geometry.x[:, 2] - fluid_domain_z_max_coordinate)) < epsilon:
+        if (
+            max(abs(channel2_domain.geometry.x[:, 2] - fluid_domain_z_max_coordinate))
+            < epsilon
+        ):
             residual_h_channel2 = max(
                 abs(
                     channel2_domain_star.geometry.x[:, 2]
@@ -552,6 +581,7 @@ def three_dimensional_steady_fsi_dual_channel(
                 )
             ) / max(abs(channel2_domain.geometry.x[:, 2]))
 
+        # Pressure residuals (relative change w.r.t. previous iterate on each channel)
         if max(abs(p_new_1)) < epsilon:
             residual_p_channel1 = max(abs(p1 - p_new_1)) / (max(abs(p_new_1)) + epsilon)
         else:
@@ -562,12 +592,12 @@ def three_dimensional_steady_fsi_dual_channel(
         else:
             residual_p_channel2 = max(abs(p2 - p_new_2)) / max(abs(p_new_2))
 
-        # Combine pressure and mesh residuals
+        # Overall residual is the max of mesh and pressure residuals across both channels
         residual_channel1 = max(residual_h_channel1, residual_p_channel1)
         residual_channel2 = max(residual_h_channel2, residual_p_channel2)
         residual = max(residual_channel1, residual_channel2)
 
-        # --- Step 6: Update state for next iteration ---
+        # 6) Accept this iterate: update state for the next coupling iteration
         p_new_1 = p1
         p_new_2 = p2
         w_new = w_star
@@ -579,5 +609,13 @@ def three_dimensional_steady_fsi_dual_channel(
 
         residual_values.append(residual)
         iteration_indices.append(iteration)
-
-    return p_new_1, p_new_2, w_new, channel1_domain, channel2_domain, residual_values, iteration_indices
+    # Return converged pressures, displacement, final meshes, and residual history
+    return (
+        p_new_1,
+        p_new_2,
+        w_new,
+        channel1_domain,
+        channel2_domain,
+        residual_values,
+        iteration_indices,
+    )

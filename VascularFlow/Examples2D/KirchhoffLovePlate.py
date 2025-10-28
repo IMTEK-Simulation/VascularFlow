@@ -99,23 +99,29 @@ def plate_bending_acm_2d(
         The right-hand side vector after Dirichlet application and load expansion.
     """
 
-    # -------------------------------
-    # 1) Compute the non-dimensional scalar multiplier D
-    # -------------------------------
-    D = (2 * (plate_thickness / 2) ** 3 * plate_young_modulus) / (
-        3
-        * (1 - plate_poisson_ratio**2)
-        * initial_channel_height**3
-        * fluid_density
-        * fluid_velocity**2
+    # -------------------------------------------------------------------------
+    # 1) Non-dimensional bending scale D (kept scalar here).
+    #    This comes from classic plate bending: Eh^3 / [12(1-ν^2)] scaled by (ρ U^2 H0^3)^-1
+    #    so that final linear system is dimensionless. If you switch to fully
+    #    dimensional K (with constitutive coupling), set D=1 and put material in K.
+    # -------------------------------------------------------------------------
+    D = (plate_thickness ** 3 * plate_young_modulus) / (
+            12
+            * (1 - plate_poisson_ratio ** 2)
+            * initial_channel_height ** 3
+            * fluid_density
+            * fluid_velocity ** 2
     )
-    # Number of Gauss points for element integration (tensor 3×3 rule → 9 points).
+
+    # Use 3x3 tensor-product Gauss rule (9 points) for the element integrals.
     nb_quad_pts_2d = 9
-    # -------------------------------
-    # 2) Assemble global matrices/vectors (ACM: 3 DOFs per node)
-    # -------------------------------
-    # K: global matrix; F: global vector (both in ACM DOF ordering).
-    K, F = assemble_global_matrices_vectors_2d_acm(
+
+    # -------------------------------------------------------------------------
+    # 2) Assemble global stiffness K and nodal weight vector (∫ N_i dA) in ACM layout.
+    #    K is built from mapped second derivatives; weights_vec contains the
+    #    consistent "mass-like" nodal areas for w-DOF expansion later.
+    # -------------------------------------------------------------------------
+    K, weights_vec = assemble_global_matrices_vectors_2d_acm(
         shape_function,
         domain_length,
         domain_height,
@@ -123,46 +129,56 @@ def plate_bending_acm_2d(
         n_y,
         nb_quad_pts_2d,
     )
-    # -------------------------------
-    # 3) Boundary conditions (Dirichlet) – determine constrained DOFs and apply
-    # -------------------------------
+
+    # -------------------------------------------------------------------------
+    # 3) Boundary DOFs: which global indices are constrained.
+    #    We do NOT apply BCs yet; first we build the physical RHS.
+    # -------------------------------------------------------------------------
     boundary_dofs = boundary_dofs_acm_2d(n_x, n_y, bc_positions)
-    # The BC function returns modified LHS/RHS after enforcing Dirichlet constraints.
-    lhs_matrix, rhs_vector = dirichlet_bc_acm_2d(K, F, boundary_dofs, bc_values)
-    # distributed_transverse_load is length n_x*n_y and targets only the w DOF.
+
+    # -------------------------------------------------------------------------
+    # 4) Build the distributed transverse load on ACM layout.
+    #    - Validate sizes (always helpful to catch indexing bugs).
+    #    - Expand q from (w-only) to [w, θx, θy] pattern: [q, 0, 0, q, 0, 0, ...].
+    #    - Form L by nodal lumping: L_i = q_i * ∫ N_i dA (already in ACM ordering).
+    #    IMPORTANT: Build L BEFORE applying BCs so total load is mesh-independent.
+    # -------------------------------------------------------------------------
     expected_size = n_x * n_y
-    # Validate distributed loads for both channels
     for name, arr in {
         "distributed_load_channel1": distributed_load_channel1,
         "distributed_load_channel2": distributed_load_channel2,
     }.items():
         if arr.size != expected_size:
             raise ValueError(
-                f"{name} must be size n_x * n_y ({expected_size}), "
-                f"but got {arr.size}."
+                f"{name} must be size n_x * n_y ({expected_size}), got {arr.size}."
             )
 
-    # -------------------------------
-    # 4) Build [q, 0, 0, q, 0, 0, ...] vector to match 3 DOFs per node.
-    # -------------------------------
-    # Function to expand a scalar field (1 DOF/node) to ACM layout (3 DOFs/node)
     def expand_to_acm_layout(load: np.ndarray) -> np.ndarray:
-        expanded = np.zeros(load.size * 3, dtype=load.dtype)
-        expanded[::3] = load  # assign only the w DOF entries
-        return expanded
+        """Map a scalar field (per node) to ACM DOF ordering: fill w, zero rotations."""
+        out = np.zeros(load.size * 3, dtype=load.dtype)
+        out[::3] = load  # w-DOF entries
+        return out
 
-    # Apply to both channels
-    new_distributed_load_channel1 = expand_to_acm_layout(distributed_load_channel1)
-    new_distributed_load_channel2 = expand_to_acm_layout(distributed_load_channel2)
-    new_distributed_load = new_distributed_load_channel2 - new_distributed_load_channel1
+    # Effective pressure (channel2 acting opposite to channel1) at nodes:
+    q = distributed_load_channel2 - distributed_load_channel1  # (n_x*n_y,)
+    q_acm = expand_to_acm_layout(q)  # (3*n_x*n_y,)
 
-    # -------------------------------
-    # 5) Form system and solve
-    # -------------------------------
-    # Scale the LHS with D and multiply the RHS by the expanded load weights.
-    a = D * lhs_matrix
-    l = new_distributed_load * rhs_vector
-    # Solve the system; spsolve accepts sparse or dense as long as it is array-like.
-    kirchhoff_Love_plate_solution = spsolve(a, l)
+    # Lump to nodal RHS using previously assembled weights (same ACM ordering):
+    L = q_acm * weights_vec
 
-    return kirchhoff_Love_plate_solution, lhs_matrix, rhs_vector
+    # -------------------------------------------------------------------------
+    # 5) Apply Dirichlet boundary conditions to BOTH K and L.
+    #    Note: current routine zeros rows only (non-symmetric BC application).
+    #    If you need symmetry, also zero columns and adjust RHS accordingly.
+    # -------------------------------------------------------------------------
+    K_bc, L_bc = dirichlet_bc_acm_2d(K.tolil(), L.copy(), boundary_dofs, bc_values)
+
+    # -------------------------------------------------------------------------
+    # 6) Solve the linear system. Multiply K by D, keep RHS as built.
+    #    Use CSR for spsolve; for iterative solvers consider preconditioning
+    #    because biharmonic problems are ill-conditioned as the mesh refines.
+    # -------------------------------------------------------------------------
+    A = D * K_bc  # final LHS
+    kirchhoff_Love_plate_solution = spsolve(A.tocsr(), L_bc)
+
+    return kirchhoff_Love_plate_solution, K_bc, L_bc

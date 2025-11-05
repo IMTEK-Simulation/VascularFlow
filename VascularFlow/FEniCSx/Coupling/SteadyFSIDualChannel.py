@@ -424,35 +424,53 @@ def three_dimensional_steady_fsi_dual_channel(
         Final deformed mesh for the bottom channel (channel_1).
     """
     # --- Build initial hexahedral meshes for both channels (unit cube) ---
-    channel1_domain = dolfinx.mesh.create_unit_cube(
+    channel1_domain = dolfinx.mesh.create_box(
         MPI.COMM_WORLD,
-        n_x_fluid_domain,
-        n_y_fluid_domain,
-        n_z_fluid_domain,
+        [
+            [
+                min(
+                    fluid_domain_1_x_inlet_coordinate,
+                    fluid_domain_1_x_outlet_coordinate,
+                ),
+                0,
+                0,
+            ],
+            [
+                max(
+                    fluid_domain_1_x_inlet_coordinate,
+                    fluid_domain_1_x_outlet_coordinate,
+                ),
+                fluid_domain_y_max_coordinate,
+                fluid_domain_z_max_coordinate,
+            ],
+        ],
+        [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
         cell_type=dolfinx.mesh.CellType.hexahedron,
     )
 
-    # Scale channel 1 to its physical extents (x length is inlet→outlet span)
-    channel1_domain.geometry.x[:, 0] *= max(
-        fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate
-    )
-    channel1_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
-    channel1_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
-
-    channel2_domain = dolfinx.mesh.create_unit_cube(
+    channel2_domain = dolfinx.mesh.create_box(
         MPI.COMM_WORLD,
-        n_x_fluid_domain,
-        n_y_fluid_domain,
-        n_z_fluid_domain,
+        [
+            [
+                min(
+                    fluid_domain_1_x_inlet_coordinate,
+                    fluid_domain_1_x_outlet_coordinate,
+                ),
+                0,
+                0,
+            ],
+            [
+                max(
+                    fluid_domain_1_x_inlet_coordinate,
+                    fluid_domain_1_x_outlet_coordinate,
+                ),
+                fluid_domain_y_max_coordinate,
+                fluid_domain_z_max_coordinate,
+            ],
+        ],
+        [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
         cell_type=dolfinx.mesh.CellType.hexahedron,
     )
-
-    # Scale channel 2 to its physical extents
-    channel2_domain.geometry.x[:, 0] *= max(
-        fluid_domain_2_x_inlet_coordinate, fluid_domain_2_x_outlet_coordinate
-    )
-    channel2_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
-    channel2_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
     # Initialize convergence tracking
     residual = 1
     iteration = 0
@@ -463,26 +481,24 @@ def three_dimensional_steady_fsi_dual_channel(
         # 1) Solve fluid in channel 1 with given inlet pressure and Re.
         #    Returns the mixed solution and the pressure sampled/sorted on the top face.
         mixed_function1, p1 = pressure_3d_pressure_inlet(
+            channel1_domain,
             fluid_domain_1_x_inlet_coordinate,
             fluid_domain_1_x_outlet_coordinate,
             fluid_domain_y_max_coordinate,
-            fluid_domain_z_max_coordinate,
             n_x_fluid_domain,
             n_y_fluid_domain,
-            n_z_fluid_domain,
             reynolds_number_channel1,
             inlet_pressure_channel1,
         )
 
         # 2) Solve fluid in channel 2.
         mixed_function2, p2 = pressure_3d_pressure_inlet(
+            channel2_domain,
             fluid_domain_2_x_inlet_coordinate,
             fluid_domain_2_x_outlet_coordinate,
             fluid_domain_y_max_coordinate,
-            fluid_domain_z_max_coordinate,
             n_x_fluid_domain,
             n_y_fluid_domain,
-            n_z_fluid_domain,
             reynolds_number_channel2,
             inlet_pressure_channel2,
         )
@@ -519,28 +535,66 @@ def three_dimensional_steady_fsi_dual_channel(
 
         # 4) Update fluid meshes by solving Laplace problems with Dirichlet BC on z=Lz.
         #    Top channel moves opposite to plate deflection on the interface; bottom follows plate.
-        fluid_domain_x_max_coordinate = max(
-            fluid_domain_1_x_inlet_coordinate, fluid_domain_1_x_outlet_coordinate
+        channel1_domain = dolfinx.mesh.create_box(
+            MPI.COMM_WORLD,
+            [
+                [
+                    min(
+                        fluid_domain_1_x_inlet_coordinate,
+                        fluid_domain_1_x_outlet_coordinate,
+                    ),
+                    0,
+                    0,
+                ],
+                [
+                    max(
+                        fluid_domain_1_x_inlet_coordinate,
+                        fluid_domain_1_x_outlet_coordinate,
+                    ),
+                    fluid_domain_y_max_coordinate,
+                    fluid_domain_z_max_coordinate,
+                ],
+            ],
+            [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
+            cell_type=dolfinx.mesh.CellType.hexahedron,
         )
-
+        fluid_domain_x_max_coordinate = max(fluid_domain_1_x_inlet_coordinate, fluid_domain_2_x_inlet_coordinate)
         channel1_domain_star = mesh_deformation_3d(
-            -w_star,  # interface displacement sign convention for channel 1
+            -1 * w_star,  # interface displacement sign convention for channel 1
+            channel1_domain,
             fluid_domain_x_max_coordinate,
             fluid_domain_y_max_coordinate,
-            fluid_domain_z_max_coordinate,
-            n_x_fluid_domain,
-            n_y_fluid_domain,
-            n_z_fluid_domain,
+        )
+
+        channel2_domain = dolfinx.mesh.create_box(
+            MPI.COMM_WORLD,
+            [
+                [
+                    min(
+                        fluid_domain_1_x_inlet_coordinate,
+                        fluid_domain_1_x_outlet_coordinate,
+                    ),
+                    0,
+                    0,
+                ],
+                [
+                    max(
+                        fluid_domain_1_x_inlet_coordinate,
+                        fluid_domain_1_x_outlet_coordinate,
+                    ),
+                    fluid_domain_y_max_coordinate,
+                    fluid_domain_z_max_coordinate,
+                ],
+            ],
+            [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
+            cell_type=dolfinx.mesh.CellType.hexahedron,
         )
 
         channel2_domain_star = mesh_deformation_3d(
             w_star,  # channel 2 moves with the plate
+            channel2_domain,
             fluid_domain_x_max_coordinate,
             fluid_domain_y_max_coordinate,
-            fluid_domain_z_max_coordinate,
-            n_x_fluid_domain,
-            n_y_fluid_domain,
-            n_z_fluid_domain,
         )
 
         # 5) Compute relative residuals for mesh motion and pressure to test convergence.

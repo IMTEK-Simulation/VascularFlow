@@ -23,7 +23,7 @@ from VascularFlow.Numerics.BasisFunctions import ACMShapeFunctions
         "fluid_velocity",
     ),
     [
-        (3, 0, 3, 0, 2, 2, 4, 8, 0.3),
+        (50, 0, 50, 0, 6.35, 6.35, 12.4, 44.6, 0.3),
     ],
 )
 def test_3d_dimensional_steady_fsi_dual_channel(
@@ -41,12 +41,12 @@ def test_3d_dimensional_steady_fsi_dual_channel(
     # -------------------------
     # Mesh & geometry settings
     # -------------------------
-    n_x_fluid_domain = 8
-    n_y_fluid_domain = 8
-    n_z_fluid_domain = 8
+    n_x_fluid_domain = 10
+    n_y_fluid_domain = 10
+    n_z_fluid_domain = 5
     n_x_plate = n_x_fluid_domain + 1
     n_y_plate = n_y_fluid_domain + 1
-    fluid_domain_y_max_coordinate = 1
+    fluid_domain_y_max_coordinate = 10
     fluid_domain_z_max_coordinate = 1
     plate_x_max_coordinate = max(
         fluid_domain_1_x_inlet_coordinate, fluid_domain_2_x_inlet_coordinate
@@ -56,8 +56,8 @@ def test_3d_dimensional_steady_fsi_dual_channel(
     # Plate & fluid properties
     # -------------------------
     plate_poisson_ratio = 0.3
-    plate_thickness = 3e6
-    plate_young_modulus = 0.3
+    plate_thickness = 20e-6
+    plate_young_modulus = 3e6
     bc_positions = ["bottom", "right", "top", "left"]
     bc_values = [0, 0, 0, 0]
     initial_channel_height = 20e-06
@@ -65,9 +65,9 @@ def test_3d_dimensional_steady_fsi_dual_channel(
     # -------------------------
     # Solver controls
     # -------------------------
-    under_relaxation_factor = 0.5
+    under_relaxation_factor = 0.05
     residual_number = 1e-06
-    iteration_number = 4
+    iteration_number = 50
     epsilon = 3e-16
     # -------------------------
     # Initial guesses
@@ -123,6 +123,9 @@ def test_3d_dimensional_steady_fsi_dual_channel(
         iteration_number,
         epsilon,
     )
+
+    #print(channel2_pressure)
+    visualize_mesh(channel2_deformed_mesh, title="Deformed Mesh from Interface Displacement")
 
     # -------------------------
     # Collect data for the final scatter plot: w_max vs Δp2
@@ -184,15 +187,13 @@ def test_3d_dimensional_steady_fsi_dual_channel(
         )
 
         # --- Set y-labels (shorter and clearer, split across lines) ---
-        ax[0].set_ylabel("Normalized midline displacement\n$\\tilde{w} = \\dfrac{w}{H_0}$")
-        ax[1].set_ylabel(
-            "Normalized midline pressure (top channel)\n$\\tilde{p}_1 = \\dfrac{p_{1,\\,\\mathrm{inlet}}}{\\rho U^2}$")
-        ax[2].set_ylabel(
-            "Normalized midline pressure (bottom channel)\n$\\tilde{p}_2 = \\dfrac{p_{2,\\,\\mathrm{inlet}}}{\\rho U^2}$")
+        ax[0].set_ylabel("$\\tilde{w} = \\dfrac{w}{H_0}$")
+        ax[1].set_ylabel("$\\tilde{p}_1 = \\dfrac{p_{1,\\,\\mathrm{inlet}}}{\\rho U^2}$")
+        ax[2].set_ylabel("$\\tilde{p}_2 = \\dfrac{p_{2,\\,\\mathrm{inlet}}}{\\rho U^2}$")
         ax[3].set_ylabel("Residual (log scale)")
 
         # --- Set x-labels ---
-        ax[2].set_xlabel("Normalized distance\n$\\tilde{x} = \\dfrac{x}{H_0}$")
+        ax[2].set_xlabel("$\\tilde{x} = \\dfrac{x}{H_0}$")
         ax[3].set_xlabel("Cumulative Iteration Count")
 
         # --- Hide redundant x-tick labels for upper shared plots ---
@@ -232,7 +233,7 @@ def plot_wmax_vs_deltap2():
 
     data = np.array(data, dtype=float)
     delta_p2_values = data[:, 0]            # hPa
-    w_max_values_um = data[:, 1] * 1e6      # convert m -> µm
+    w_max_values_um = data[:, 1]     # convert m -> µm
     delta_p1_values = data[:, 2]            # hPa (for legend groups)
 
     # Group by Δp1, give each group a distinct marker/color

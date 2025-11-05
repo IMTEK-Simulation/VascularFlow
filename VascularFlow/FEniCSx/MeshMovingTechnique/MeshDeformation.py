@@ -158,12 +158,9 @@ def mesh_deformation(
 
 def mesh_deformation_3d(
     interface_displacement: np.ndarray,
+    fluid_domain: mesh.Mesh,
     fluid_domain_x_max_coordinate: float,
     fluid_domain_y_max_coordinate: float,
-    fluid_domain_z_max_coordinate: float,
-    n_x: int,
-    n_y: int,
-    n_z: int,
 ):
     """
     Build a hexahedral unit-cube mesh, scale it to a rectangular prism, and
@@ -185,15 +182,12 @@ def mesh_deformation_3d(
                     append u(x, y)
         where Δx = Lx / n_x and Δy = Ly / n_y.
         (I.e., first row is y = Ly with x descending; last row is y = 0.)
+    fluid_domain : dolfinx.mesh.Mesh
+        A 3D finite element mesh defining the geometry of the fluid domain.
     fluid_domain_x_max_coordinate : float
         Physical length in the x-direction (Lx).
     fluid_domain_y_max_coordinate : float
         Physical length in the y-direction (Ly).
-    fluid_domain_z_max_coordinate : float
-        Physical length in the z-direction (Lz).
-    n_x, n_y, n_z : int
-        Number of cells in x, y, z when creating the unit cube. The mesh
-        is hexahedral.
 
     Returns
     -------
@@ -201,15 +195,6 @@ def mesh_deformation_3d(
         The deformed mesh. Only the z-coordinates are modified in-place:
         X[:, 2] ← X[:, 2] + u.
     """
-
-    # Create a unit-cube hex mesh and scale it to the requested box
-    fluid_domain = mesh.create_unit_cube(
-        MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=mesh.CellType.hexahedron
-    )
-
-    fluid_domain.geometry.x[:, 0] *= fluid_domain_x_max_coordinate
-    fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
-    fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
 
     tdim = fluid_domain.topology.dim
     fdim = tdim - 1
@@ -237,28 +222,22 @@ def mesh_deformation_3d(
         displacement_function_space, fdim, facets_rest
     )
 
-    # ---- Collect top-face DOFs in the exact order the user array expects ----
-    # y-levels: Ly → 0, at step Δy; on each level, we pick edge DOFs with z = Lz,
-    # and later assign values in x-descending order via the input array layout.
-    rows = []
-    y_levels = np.linspace(fluid_domain_y_max_coordinate, 0.0, n_y + 1)
-    for yi in y_levels:
-        edge_dofs = fem.locate_dofs_geometrical(
-            displacement_function_space,
-            lambda x: np.isclose(x[2], fluid_domain_z_max_coordinate, atol=1e-12)
-            & np.isclose(x[1], yi, atol=1e-12),
-        )
-        rows.append(edge_dofs)
+    boundary_dofs_top = fem.locate_dofs_topological(
+        displacement_function_space, fdim, facet_top
+    )
+    dof_coordinates = displacement_function_space.tabulate_dof_coordinates()
+    top_wall_dofs_coords = dof_coordinates[boundary_dofs_top]
 
-    # Concatenate rows: (y=Ly row), then (y=Ly-Δy), …, (y=0 row)
-    sorted_boundary_dofs_top = np.concatenate(rows)
+    ys = np.round(top_wall_dofs_coords[:, 1], 12)
+    y_levels = np.unique(ys)[::-1]
+    sorted_indices = []
+    for y in y_levels:
+        idx = np.where(ys == y)[0]
+        idx_sorted = idx[np.argsort(-top_wall_dofs_coords[idx, 0])]
+        sorted_indices.extend(idx_sorted)
 
-    # Sanity-check the size matches the provided array length
-    expected = (n_x + 1) * (n_y + 1)
-    assert (
-        interface_displacement.size == expected
-    ), f"interface_displacement has length {interface_displacement.size}, expected {expected}"
-
+    sorted_indices = np.array(sorted_indices)
+    sorted_boundary_dofs_top = boundary_dofs_top[sorted_indices]
     # Build Dirichlet data: zeros everywhere, custom values on top DOFs
     bc_rest = fem.dirichletbc(
         default_scalar_type(0), boundary_dofs_rest, displacement_function_space

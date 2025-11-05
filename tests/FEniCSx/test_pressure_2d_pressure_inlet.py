@@ -107,34 +107,48 @@ def test_navier_stokes_problem_pressure_inlet(
 
 
 def test_pressure_3d_pressure_inlet():
-    fluid_domain_x_inlet_coordinate = 3
+    fluid_domain_x_inlet_coordinate = 50
     fluid_domain_x_outlet_coordinate = 0
-    fluid_domain_y_max_coordinate = 1
+    fluid_domain_y_max_coordinate = 10
     fluid_domain_z_max_coordinate = 1
-    n_x = 30
+    n_x = 20
     n_y = 10
-    n_z = 10
+    n_z = 5
+
+    fluid_3d_domain = dolfinx.mesh.create_box(
+        MPI.COMM_WORLD,
+        [
+            [
+                min(
+                    fluid_domain_x_inlet_coordinate,
+                    fluid_domain_x_outlet_coordinate,
+                ),
+                0,
+                0,
+            ],
+            [
+                max(
+                    fluid_domain_x_inlet_coordinate,
+                    fluid_domain_x_outlet_coordinate,
+                ),
+                fluid_domain_y_max_coordinate,
+                fluid_domain_z_max_coordinate,
+            ],
+        ],
+        [n_x, n_y, n_z],
+        cell_type=dolfinx.mesh.CellType.hexahedron,
+    )
 
     mixed_function, interface_pressure = pressure_3d_pressure_inlet(
+        fluid_3d_domain,
         fluid_domain_x_inlet_coordinate=fluid_domain_x_inlet_coordinate,
         fluid_domain_x_outlet_coordinate=fluid_domain_x_outlet_coordinate,
         fluid_domain_y_max_coordinate=fluid_domain_y_max_coordinate,
-        fluid_domain_z_max_coordinate=fluid_domain_z_max_coordinate,
         n_x=n_x,
         n_y=n_y,
-        n_z=n_z,
-        reynolds_number=2,
-        inlet_pressure=8,
+        reynolds_number=6,
+        inlet_pressure=44,
     )
 
-    fluid_domain = dolfinx.mesh.create_unit_cube(
-        MPI.COMM_WORLD, n_x, n_y, n_z, cell_type=dolfinx.mesh.CellType.hexahedron
-    )
-
-    # Scale the mesh geometry
-    fluid_domain.geometry.x[:, 0] *= max(fluid_domain_x_inlet_coordinate, fluid_domain_x_outlet_coordinate)
-    fluid_domain.geometry.x[:, 1] *= fluid_domain_y_max_coordinate
-    fluid_domain.geometry.x[:, 2] *= fluid_domain_z_max_coordinate
-
-    visualize_mixed(mixed_function, fluid_domain)
-    #print(interface_pressure)
+    visualize_mixed(mixed_function, fluid_3d_domain)
+    print(interface_pressure.shape)

@@ -613,7 +613,7 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     v, q = ufl.TestFunctions(W)
     # Boundary measure and facet normal
     ds = ufl.Measure("ds", domain=fluid_domain)
-    n = ufl.FacetNormal(fluid_domain)
+    n_normal = ufl.FacetNormal(fluid_domain)
     # Velocity subspace (W0) and its collapsed scalar/vector space (V)
     W0 = W.sub(0)
     V, _ = W0.collapse()
@@ -767,7 +767,7 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     F = ufl.inner(ufl.grad(uh) * uh, v) * ufl.dx  # Convective term
     F += ((1 / Re) * ufl.inner(ufl.grad(uh), ufl.grad(v))) * ufl.dx  # Diffusion term
     F -= ufl.inner(ph, ufl.div(v)) * ufl.dx  # Pressure gradient
-    F += ufl.dot(ph * n, v) * ds  # Weak imposition of Dirichlet conditions
+    F += ufl.dot(ph * n_normal, v) * ds  # Weak imposition of Dirichlet conditions
     F += ufl.inner(ufl.div(uh), q) * ufl.dx  # Continuity equation
 
     # Create the nonlinear problem
@@ -857,17 +857,17 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     # We need a facet tag for the outlet to build a boundary measure restricted
     # to Γ_out. We tag the outlet facets with ID = 1.
     fdim = fluid_domain.topology.dim - 1
+
+    # tag outlet facets with ID = 1
     outlet_values = np.full(len(outlet_facet), 1, dtype=np.int32)
     outlet_tags = dolfinx.mesh.meshtags(fluid_domain, fdim,
-                                            outlet_facet, outlet_values)
+                                        outlet_facet, outlet_values)
 
-    # New boundary measure with subdomain_data
     ds_out = ufl.Measure("ds", domain=fluid_domain, subdomain_data=outlet_tags)
 
-    # Form for volumetric flow rate through the outlet
-    Q_form = dolfinx.fem.form(ufl.dot(uh, n) * ds_out(1))
+    # Use the solved velocity uh
+    Q_form = dolfinx.fem.form(ufl.dot(uh, n_normal) * ds_out(1))
 
-    # Assemble and reduce across processes
     Q_local = dolfinx.fem.assemble_scalar(Q_form)
     Q_outlet = fluid_domain.comm.allreduce(Q_local, op=MPI.SUM)
 

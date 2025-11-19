@@ -20,12 +20,13 @@ Boundary conditions:
     - zero Laplacian of the mesh displacement on the fluid walls(Δw_a).
 """
 
+from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices
 from dolfinx import mesh, fem, default_scalar_type
 from mpi4py import MPI
 import numpy as np
 import ufl
 from dolfinx.fem.petsc import LinearProblem
-from dolfinx.fem import functionspace
+from dolfinx.fem import functionspace, locate_dofs_topological
 
 
 def mesh_deformation(
@@ -262,6 +263,270 @@ def mesh_deformation_3d(
     w_a = problem.solve()
 
     # Update mesh geometry by adding u to z-coordinate (vertical displacement)
+    x = fluid_domain.geometry.x
+    x[:, 2] += w_a.x.array
+
+    return fluid_domain
+
+
+# -----------------------------------------------------------------------------
+# Mesh deformation for a 3D rigid–elastic–rigid channel using plate deflection
+# -----------------------------------------------------------------------------
+#
+# Context:
+#   We consider a 3D channel aligned with the x-axis consisting of three sections:
+#       - Left rigid section
+#       - Middle elastic section (top wall is a Kirchhoff–Love plate)
+#       - Right rigid section
+#
+#   The fluid domain is described by:
+#       - x ∈ [0, channel_length]
+#       - y ∈ [0, channel_width]
+#       - z ∈ [0, channel_height]
+#
+#   The fluid–structure coupling is performed in a partitioned manner:
+#       1. A fluid problem (Navier–Stokes) is solved on a fixed fluid mesh,
+#          yielding the pressure load on the top middle (elastic) wall.
+#       2. A Kirchhoff–Love plate bending problem is solved for the elastic wall,
+#          giving the vertical displacement of the plate, denoted
+#          `interface_displacement`.
+#       3. This function uses that displacement as a Dirichlet boundary condition
+#          on the top middle wall of the fluid mesh and solves a Laplace problem
+#          for a smooth displacement field in the entire fluid domain.
+#          The resulting displacement field is then used to deform the mesh.
+#
+# PDE model in this function:
+#   - Scalar Laplace equation for the mesh displacement field w(x):
+#
+#       -Δw = 0   in Ω_f
+#
+#     with Dirichlet boundary conditions:
+#       - w = 0 on rigid walls and rigid top sections (left and right)
+#       - w = interface_displacement(x, y) on the elastic top middle wall
+#
+#   This yields a smooth extension of the interface displacement into the
+#   interior of the fluid domain. The mesh coordinates are updated as:
+#
+#       z_new = z_old + w
+#
+# Purpose:
+#   Given the plate displacement along the elastic interface, compute a harmonic
+#   extension into the fluid domain and update the fluid mesh geometry to match
+#   the deformed configuration.
+#
+# Output:
+#   - Deformed `fluid_domain` mesh with updated coordinates.
+# -----------------------------------------------------------------------------
+def mesh_deformation_3d_rigid_elastic_rigid_channel(
+    interface_displacement: np.ndarray,
+    fluid_domain: mesh.Mesh,
+    channel_length: float,
+    channel_width: float,
+    channel_height: float,
+    x_min_channel_left: float,
+    x_max_channel_right: float,
+):
+    """
+    Parameters
+    ----------
+    interface_displacement : numpy.ndarray
+        Array of vertical displacement values on the top middle wall (elastic
+        section) of the channel. The ordering of the values must be consistent
+        with the sorted interface degrees of freedom used in the function.
+    fluid_domain : dolfinx.mesh.Mesh
+        The original (undeformed) fluid mesh of the 3D channel.
+    channel_length : float
+        Total length of the channel in the x-direction.
+    channel_width : float
+        Width of the channel in the y-direction (domain extent in y).
+    channel_height : float
+        Height of the channel in the z-direction (domain extent in z).
+    x_min_channel_left : float
+        x-coordinate of the left boundary of the left channel section (used
+        to identify the left top rigid section).
+    x_max_channel_right : float
+        x-coordinate of the right boundary of the right channel section (used
+        to identify the right top rigid section).
+
+    Returns
+    -------
+    fluid_domain : dolfinx.mesh.Mesh
+        The deformed fluid mesh, with its geometry updated in place by adding
+        the computed scalar displacement to the z-coordinate of each mesh node.
+    """
+
+    # -------------------------------------------------------------------------
+    # 1. Geometric setup and basic mesh/topological info
+    # -------------------------------------------------------------------------
+
+    # For consistency with the fluid problem, we reset the rigid-section bounds:
+    x_max_channel_left = channel_length
+    x_min_channel_right = 0
+
+    # Topological dimensions
+    tdim = fluid_domain.topology.dim  # mesh dimension (should be 3)
+    fdim = tdim - 1  # facet dimension (2D surfaces)
+    # Ensure connectivity information is available for element location
+    fluid_domain.topology.create_connectivity(tdim, tdim)
+
+    # Scalar displacement function space (Lagrange P1)
+    displacement_function_space = functionspace(fluid_domain, ("Lagrange", 1))
+
+    # -------------------------------------------------------------------------
+    # 2. Mark boundary facets of the channel
+    # -------------------------------------------------------------------------
+    def inlet_marker(x):
+        return np.isclose(x[0], x_max_channel_left)
+
+    inlet_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
+    )
+
+    def outlet_marker(x):
+        return np.isclose(x[0], x_min_channel_right)
+
+    outlet_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, outlet_marker
+    )
+
+    def walls_rest(x):
+        return (
+            np.isclose(x[0], x_max_channel_left)
+            | np.isclose(x[0], x_min_channel_right)
+            | np.isclose(x[1], 0)
+            | np.isclose(x[1], channel_width)
+            | np.isclose(x[2], 0)
+        )
+
+    walls_rest_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, walls_rest
+    )
+
+    tol = 1e-8
+
+    def wall_top_left_channel(x):
+        return np.logical_and.reduce(
+            (
+                np.isclose(x[2], channel_height, atol=tol),
+                x[0] > x_min_channel_left - tol,
+                x[0] <= x_max_channel_left + tol,
+            )
+        )
+
+    wall_top_left_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_top_left_channel
+    )
+
+    def wall_top_right_channel(x):
+        return np.logical_and.reduce(
+            (
+                np.isclose(x[2], channel_height, atol=tol),
+                x[0] >= x_min_channel_right - tol,
+                x[0] < x_max_channel_right + tol,
+            )
+        )
+
+    wall_top_right_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_top_right_channel
+    )
+
+    all_boundary_facets = exterior_facet_indices(fluid_domain.topology)
+    wall_top_middle_facet = np.setdiff1d(
+        all_boundary_facets,
+        np.unique(
+            np.concatenate(
+                (
+                    inlet_facet,
+                    outlet_facet,
+                    walls_rest_facet,
+                    wall_top_left_facet,
+                    wall_top_right_facet,
+                )
+            )
+        ),
+    )
+
+    # -------------------------------------------------------------------------
+    # 3. Locate displacement DOFs for each boundary region
+    # -------------------------------------------------------------------------
+
+    dofs_walls_rest = locate_dofs_topological(
+        displacement_function_space, fdim, walls_rest_facet
+    )
+
+    dofs_wall_top_left = locate_dofs_topological(
+        displacement_function_space, fdim, wall_top_left_facet
+    )
+
+    dofs_wall_top_right = locate_dofs_topological(
+        displacement_function_space, fdim, wall_top_right_facet
+    )
+
+    dofs_wall_top_middle = locate_dofs_topological(
+        displacement_function_space, fdim, wall_top_middle_facet
+    )
+
+    # -------------------------------------------------------------------------
+    # 4. Sort top middle wall DOFs to match interface_displacement ordering
+    # -------------------------------------------------------------------------
+    dof_coordinates = displacement_function_space.tabulate_dof_coordinates()
+    dofs_wall_top_middle_coords = dof_coordinates[dofs_wall_top_middle]
+
+    ys = np.round(dofs_wall_top_middle_coords[:, 1], 12)
+    y_levels = np.unique(ys)[::-1]
+    sorted_indices = []
+    for y in y_levels:
+        idx = np.where(ys == y)[0]
+        idx_sorted = idx[np.argsort(-dofs_wall_top_middle_coords[idx, 0])]
+        sorted_indices.extend(idx_sorted)
+
+    sorted_indices = np.array(sorted_indices)
+    sorted_boundary_dofs_wall_top_middle = dofs_wall_top_middle[sorted_indices]
+
+    # -------------------------------------------------------------------------
+    # 5. Define Dirichlet boundary conditions for the Laplace problem
+    # -------------------------------------------------------------------------
+    bc_rest = fem.dirichletbc(
+        default_scalar_type(0), dofs_walls_rest, displacement_function_space
+    )
+
+    bc_wall_top_left = fem.dirichletbc(
+        default_scalar_type(0), dofs_wall_top_left, displacement_function_space
+    )
+
+    bc_wall_top_right = fem.dirichletbc(
+        default_scalar_type(0), dofs_wall_top_right, displacement_function_space
+    )
+
+    wall_top_middle_bc_value = fem.Function(displacement_function_space)
+    for dof, value in zip(sorted_boundary_dofs_wall_top_middle, interface_displacement):
+        wall_top_middle_bc_value.x.array[dof] = value
+
+    bc_wall_top_middle = fem.dirichletbc(
+        wall_top_middle_bc_value, sorted_boundary_dofs_wall_top_middle
+    )
+    bc = [bc_wall_top_middle, bc_rest, bc_wall_top_left, bc_wall_top_right]
+
+    # -------------------------------------------------------------------------
+    # 6. Variational problem for harmonic extension: -Δu = 0 in Ω
+    # -------------------------------------------------------------------------
+
+    # Variational problem: -Δu = 0 with Dirichlet BCs
+    u = ufl.TrialFunction(displacement_function_space)
+    v = ufl.TestFunction(displacement_function_space)
+    lhs = ufl.dot(ufl.grad(u), ufl.grad(v)) * ufl.dx
+    rhs = fem.Constant(fluid_domain, default_scalar_type(0)) * v * ufl.dx
+
+    # Solve Laplace problem
+    problem = LinearProblem(
+        lhs, rhs, bcs=bc, petsc_options={"ksp_type": "preonly", "pc_type": "lu"}
+    )
+    w_a = problem.solve()
+
+    # -------------------------------------------------------------------------
+    # 7. Update mesh geometry: apply vertical displacement to z-coordinate
+    # -------------------------------------------------------------------------
+
     x = fluid_domain.geometry.x
     x[:, 2] += w_a.x.array
 

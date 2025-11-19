@@ -3,7 +3,11 @@ import pytest
 import numpy as np
 from mpi4py import MPI
 
-from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import mesh_deformation, mesh_deformation_3d
+from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import (
+    mesh_deformation,
+    mesh_deformation_3d,
+    mesh_deformation_3d_rigid_elastic_rigid_channel,
+)
 from VascularFlow.FEniCSx.PostProcessing.VisualizeMesh import visualize_mesh
 
 
@@ -50,8 +54,8 @@ def test_mesh_deformation(
     min_y_coord = np.min(x[:, 1])
 
     # Check displacement range — basic correctness
-    #assert max_y_coord > 1.0, "Top wall should have moved upward"
-    #assert min_y_coord >= 0.0, "Bottom wall should remain fixed or positive"
+    # assert max_y_coord > 1.0, "Top wall should have moved upward"
+    # assert min_y_coord >= 0.0, "Bottom wall should remain fixed or positive"
 
     print(f"Max Y coordinate after deformation: {max_y_coord:.6f}")
 
@@ -59,54 +63,81 @@ def test_mesh_deformation(
     visualize = True  # Set to False when running in CI environments
 
     if visualize:
-        visualize_mesh(deformed_domain, title="Deformed Mesh from Interface Displacement")
+        visualize_mesh(
+            deformed_domain, title="Deformed Mesh from Interface Displacement"
+        )
 
 
 def test_mesh_deformation_3d():
-    # Interface displacement values prescribed on the TOP face (z = Lz)
-    # for a CG1 (Q1) grid with (n_y+1) × (n_x+1) nodes.
-    # Ordering convention (as required by mesh_deformation_3d):
-    #   y = Ly, Ly-Δy, …, 0   (rows, descending in y)
-    #   within each row: x = Lx, Lx-Δx, …, 0 (descending in x)
     interface_displacement = np.array([
-        0.00000000e+00, 6.42986466e-17, -1.70485754e-16, -2.33327337e-16,
-        -4.24164428e-16, -2.45173459e-17, 5.43107595e-17, 0.00000000e+00,
-        2.55810990e-17, 5.13539001e-02, 1.29518168e-01, 1.76299392e-01,
-        1.76299392e-01, 1.29518168e-01, 5.13539001e-02, 0.00000000e+00,
-        -1.83956153e-16, 1.29518168e-01, 3.28701899e-01, 4.51616223e-01,
-        4.51616223e-01, 3.28701899e-01, 1.29518168e-01, 0.00000000e+00,
-        1.52932103e-16, 1.76299392e-01, 4.51616223e-01, 6.23487607e-01,
-        6.23487607e-01, 4.51616223e-01, 1.76299392e-01, 0.00000000e+00,
-        3.95755300e-16, 1.76299392e-01, 4.51616223e-01, 6.23487607e-01,
-        6.23487607e-01, 4.51616223e-01, 1.76299392e-01, 0.00000000e+00,
-        3.09643928e-17, 1.29518168e-01, 3.28701899e-01, 4.51616223e-01,
-        4.51616223e-01, 3.28701899e-01, 1.29518168e-01, 0.00000000e+00,
-        2.39822803e-18, 5.13539001e-02, 1.29518168e-01, 1.76299392e-01,
-        1.76299392e-01, 1.29518168e-01, 5.13539001e-02, 1.12495032e-17,
-        0.00000000e+00, 6.25223572e-17, -1.04450521e-17, 8.46530131e-17,
-        5.05841023e-19, 2.09653876e-16, 2.75157641e-17, 0.00000000e+00
+        3.08524224e-16, 1.24402995e-14, 1.06787082e-15, -9.48998972e-16,
+        6.01597103e-15, -2.06970622e-14, 2.29953555e-15, -2.34770682e-15,
+        3.41781063e-16, -1.04062146e-16, -1.48760570e-15, 1.56681347e-01,
+        2.66827993e-01, 2.78569369e-01, 2.59292901e-01, 2.34969635e-01,
+        2.08595912e-01, 1.68381287e-01, 8.57789226e-02, 4.23468785e-15,
+        0.00000000e+00, 4.70679709e-01, 8.24458953e-01, 8.76439679e-01,
+        8.19521617e-01, 7.42839552e-01, 6.57434930e-01, 5.23688324e-01,
+        2.62242544e-01, -4.24498727e-16, 0.00000000e+00, 7.81632304e-01,
+        1.39738033e+00, 1.50417015e+00, 1.41169496e+00, 1.27987810e+00,
+        1.12994683e+00, 8.92038128e-01, 4.40813798e-01, -7.51612308e-15,
+        0.00000000e+00, 9.98604296e-01, 1.80736543e+00, 1.95986167e+00,
+        1.84373042e+00, 1.67181601e+00, 1.47367101e+00, 1.15734146e+00,
+        5.67219527e-01, -2.16164960e-15, 0.00000000e+00, 1.07559583e+00,
+        1.95470957e+00, 2.12480050e+00, 2.00051901e+00, 1.81407944e+00,
+        1.59822277e+00, 1.25300858e+00, 6.12396166e-01, -3.93031525e-15,
+        -1.13743878e-14, 9.98604296e-01, 1.80736543e+00, 1.95986167e+00,
+        1.84373042e+00, 1.67181601e+00, 1.47367101e+00, 1.15734146e+00,
+        5.67219527e-01, -9.84062656e-16, -2.02824041e-15, 7.81632304e-01,
+        1.39738033e+00, 1.50417015e+00, 1.41169496e+00, 1.27987810e+00,
+        1.12994683e+00, 8.92038128e-01, 4.40813798e-01, 0.00000000e+00,
+        1.90119800e-14, 4.70679709e-01, 8.24458953e-01, 8.76439679e-01,
+        8.19521617e-01, 7.42839552e-01, 6.57434930e-01, 5.23688324e-01,
+        2.62242544e-01, 4.87183194e-15, 1.91263591e-14, 1.56681347e-01,
+        2.66827993e-01, 2.78569369e-01, 2.59292901e-01, 2.34969635e-01,
+        2.08595912e-01, 1.68381287e-01, 8.57789226e-02, 5.86797498e-15,
+        -6.08454221e-15, 9.02222925e-15, 1.78064925e-14, 1.23369740e-14,
+        5.01021058e-15, 1.65113766e-16, -1.15452717e-15, 4.59077733e-16,
+        -2.77109118e-15, -5.87804843e-15
     ])
-    # Zero out tiny numerical noise so the boundary data is clean.
-    interface_displacement[np.abs(interface_displacement) < 1e-7] = 0
-    # Box size (Lx, Ly, Lz) and mesh resolution (n_x, n_y, n_z).
-    # With CG1 on hexes, the top face will have (n_y+1) × (n_x+1) nodes.
-    fluid_domain_x_max_coordinate=1
-    fluid_domain_y_max_coordinate=1
-    fluid_domain_z_max_coordinate=1
-    n_x=7
-    n_y=7
-    n_z=7
 
-    # Run the deformation: solves Laplace on the box with the given top-face
-    # Dirichlet data and displaces the mesh in the z-direction.
-    deformed_domain_3d = mesh_deformation_3d(
-        interface_displacement,
-        fluid_domain_x_max_coordinate,
-        fluid_domain_y_max_coordinate,
-        fluid_domain_z_max_coordinate,
-        n_x,
-        n_y,
-        n_z,
+    interface_displacement[np.abs(interface_displacement) < 1e-7] = 0
+    channel_length = 60
+    channel_width = 10
+    channel_height = 1
+
+    n_x_fluid_domain = 20
+    n_y_fluid_domain = 10
+    n_z_fluid_domain = 5
+
+    fluid_domain = dolfinx.mesh.create_box(
+        MPI.COMM_WORLD,
+        [
+            [
+                0,
+                0,
+                0,
+            ],
+            [
+                channel_length,
+                channel_width,
+                channel_height,
+            ],
+        ],
+        [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
+        cell_type=dolfinx.mesh.CellType.hexahedron,
     )
-    # Visual inspection: render the deformed mesh.
-    visualize_mesh(deformed_domain_3d, title="Deformed Mesh from Interface Displacement")
+    x_max_channel_right = 18
+    x_min_channel_left = 45
+
+    deformed_domain_3d = mesh_deformation_3d_rigid_elastic_rigid_channel(
+        interface_displacement,
+        fluid_domain,
+        channel_length,
+        channel_width,
+        channel_height,
+        x_min_channel_left,
+        x_max_channel_right,
+    )
+    visualize_mesh(
+        deformed_domain_3d, title="Deformed Mesh from Interface Displacement"
+    )

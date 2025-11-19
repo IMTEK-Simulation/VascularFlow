@@ -7,6 +7,7 @@ import dolfinx
 from VascularFlow.FEniCSx.FluidFlow.Pressure2DPressureInlet import (
     pressure_2d_pressure_inlet,
     pressure_3d_pressure_inlet,
+    pressure_3d_pressure_inlet_rigid_elastic_rigid_channel,
 )
 from VascularFlow.FEniCSx.PostProcessing.VisualizdMixed import visualize_mixed
 from VascularFlow.FEniCSx.MeshMovingTechnique.MeshDeformation import mesh_deformation
@@ -152,3 +153,55 @@ def test_pressure_3d_pressure_inlet():
 
     visualize_mixed(mixed_function, fluid_3d_domain)
     print(interface_pressure.shape)
+
+
+def test_pressure_3d_pressure_inlet_rigid_elastic_rigid_channel():
+
+    channel_length = 60
+    channel_width = 10
+    channel_height = 1
+
+    x_max_channel_right = 18
+    x_min_channel_left = 45
+
+    n_x_fluid_domain = 20
+    n_y_fluid_domain = 10
+    n_z_fluid_domain = 5
+
+    inlet_pressure = 42
+    outlet_pressure = 0
+    reynolds_number = 6
+
+    fluid_domain = dolfinx.mesh.create_box(
+        MPI.COMM_WORLD,
+        [
+            [
+                0,
+                0,
+                0,
+            ],
+            [
+                channel_length,
+                channel_width,
+                channel_height,
+            ],
+        ],
+        [n_x_fluid_domain, n_y_fluid_domain, n_z_fluid_domain],
+        cell_type=dolfinx.mesh.CellType.hexahedron,
+    )
+
+
+
+    mixed_function,p, l, nx, ny = pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
+        fluid_domain,
+        channel_length,
+        channel_width,
+        channel_height,
+        x_max_channel_right,
+        x_min_channel_left,
+        inlet_pressure,
+        outlet_pressure,
+        reynolds_number,
+    )
+
+    visualize_mixed(mixed_function, fluid_domain)

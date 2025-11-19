@@ -367,9 +367,9 @@ def pressure_3d_pressure_inlet(
 
     def walls_rest(x):
         return (
-                np.isclose(x[1], 0)
-                | np.isclose(x[1], fluid_domain_y_max_coordinate)
-                | np.isclose(x[2], 0)
+            np.isclose(x[1], 0)
+            | np.isclose(x[1], fluid_domain_y_max_coordinate)
+            | np.isclose(x[2], 0)
         )
 
     walls_rest_facet = dolfinx.mesh.locate_entities_boundary(
@@ -451,7 +451,8 @@ def pressure_3d_pressure_inlet(
     dof_coordinates = pressure_field.function_space.tabulate_dof_coordinates()
 
     top_wall_dofs = dolfinx.fem.locate_dofs_topological(
-        pressure_field.function_space, fluid_domain.topology.dim - 1, top_facet)
+        pressure_field.function_space, fluid_domain.topology.dim - 1, top_facet
+    )
 
     top_wall_coords = dof_coordinates[top_wall_dofs]
 
@@ -463,7 +464,390 @@ def pressure_3d_pressure_inlet(
     sorted_interface_pressure_x = np.empty_like(interface_pressure)
 
     for j in range(n_y + 1):
-        sorted_interface_pressure_x[j * (n_x + 1):(j + 1) * (n_x + 1)] = interface_pressure[
-            (n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
+        sorted_interface_pressure_x[j * (n_x + 1) : (j + 1) * (n_x + 1)] = (
+            interface_pressure[(n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
+        )
 
     return wh, sorted_interface_pressure_x
+
+
+# -----------------------------------------------------------------------------
+# Steady 3D Navier–Stokes solver for a composite channel with a rigid–elastic–rigid
+# configuration and pressure boundary conditions
+# -----------------------------------------------------------------------------
+#
+# Geometry:
+#   - A 3D channel in the x-direction with three parts:
+#       * Left channel      : rigid walls
+#       * Middle channel    : top wall is elastic (Kirchhoff–Love plate) and the rests are rigid
+#       * Right channel     : rigid walls
+#
+#   The domain is described by:
+#       - x ∈ [0, channel_length]
+#       - y ∈ [0, channel_width]
+#       - z ∈ [0, channel_height]
+#
+#   The left and right sub-channels are identified via x_min_channel_right and
+#   x_max_channel_right. The remaining middle part is the elastic-top section.
+#
+# PDE model:
+#   - Steady incompressible Navier–Stokes equations (non-dimensional form):
+#
+#       (u · ∇)u - (1/Re) Δu + ∇p = 0     in Ω
+#                           ∇·u = 0       in Ω
+#
+#   - Boundary conditions:
+#       * Inlet  (x = x_max_channel_left)  : prescribed pressure = inlet_pressure
+#       * Outlet (x = x_min_channel_right) : prescribed pressure = outlet_pressure
+#       * All walls (including top)        : no-slip (u = 0)
+#
+# Purpose:
+#   This function solves the steady Navier–Stokes problem in the given mesh
+#   and extracts the pressure distribution on the *top middle wall* (the elastic
+#   section). This pressure distribution is reorganized into a 1D array
+#   `top_middle_wall_p_sorted_x`, arranged so that it can be used as a load
+#   distribution (source term) in a Kirchhoff–Love plate bending model to compute
+#   the deflection of the elastic top wall.
+#
+# Output:
+#   - wh                         : mixed solution Function (u, p)
+#   - top_middle_wall_p_sorted_x : pressure on the elastic top wall, reordered
+#                                  consistently along x for each y
+#   - channel_length_middle      : used as the plate length
+#   - unique_x                   : sorted unique x-coordinates on that wall
+#   - unique_y                   : sorted unique y-coordinates on that wall
+# -----------------------------------------------------------------------------
+def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
+    fluid_domain: dolfinx.mesh.Mesh,
+    channel_length: float,
+    channel_width: float,
+    channel_height: float,
+    x_max_channel_right: float,
+    x_min_channel_left: float,
+    inlet_pressure: float,
+    outlet_pressure: float,
+    reynolds_number: float,
+):
+    """
+    Solve steady 3D Navier–Stokes flow in a composite rigid–elastic–rigid channel
+    and extract the pressure distribution on the elastic top wall.
+
+    The function assumes a straight 3D channel aligned with the x-axis, composed of
+    three parts:
+        - Left section  (rigid top wall)
+        - Middle section (elastic top wall, modeled later as a Kirchhoff–Love plate)
+        - Right section (rigid top wall)
+
+    The flow is driven by a prescribed pressure difference between inlet and outlet
+    (pressure boundary conditions), while all walls (including the elastic wall)
+    are no-slip for the fluid.
+
+    Parameters
+    ----------
+    fluid_domain :
+        dolfinx.mesh.Mesh representing the full fluid domain.
+    channel_length : float
+        Total length of the channel in the x-direction.
+    channel_width : float
+        Channel width in the y-direction (domain extent in y).
+    channel_height : float
+        Channel height in the z-direction (domain extent in z).
+    x_max_channel_right : float
+        x-coordinate of the right end of the right channel section.
+    x_min_channel_left : float
+        x-coordinate of the left end of the left channel section.
+    inlet_pressure : float
+        Prescribed pressure at the inlet boundary (x = x_max_channel_left).
+    outlet_pressure : float
+        Prescribed pressure at the outlet boundary (x = x_min_channel_right).
+    reynolds_number : float
+        Reynolds number Re = (U L) / ν used to non-dimensionalize the equations.
+    Returns
+    -------
+    wh :
+        dolfinx.fem.Function representing the mixed solution (u, p)
+    top_middle_wall_p_sorted_x : numpy.ndarray
+        1D array of pressure values on the elastic top middle wall, reordered
+        so that for each y-level the values are sorted along x. This array is
+        intended to be used as the load/source function for the Kirchhoff–Love
+        plate bending problem.
+    channel_length_middle: float
+        used as the plate length.
+    unique_x : numpy.ndarray
+        Sorted array of unique x-coordinates on the top middle wall.
+        used as number of cells (or divisions) in x-direction in the plate mesh.
+    unique_y : numpy.ndarray
+        Sorted array of unique y-coordinates on the top middle wall.
+        used as number of cells (or divisions) in y-direction in the plate mesh.
+    """
+
+    # -------------------------------------------------------------------------
+    # 1. Geometric partition of the channel into left / middle / right sections
+    # -------------------------------------------------------------------------
+
+    # For simplicity, we reset the left and right x-limits of the rigid sections.
+    x_min_channel_right = 0
+    x_max_channel_left = channel_length
+    # Middle section is defined as the interval between the left and right sections
+    x_min_channel_middle = x_max_channel_right
+    x_max_channel_middle = x_min_channel_left
+    # Lengths of the left, middle and right sections (useful for diagnostics)
+    channel_length_middle = x_max_channel_middle - x_min_channel_middle
+    # channel_length_left = x_max_channel_left - x_min_channel_left
+    # channel_length_right = x_max_channel_right - x_min_channel_right
+
+    # -------------------------------------------------------------------------
+    # 2. Mixed finite element spaces: velocity (vector P2) and pressure (scalar P1)
+    # -------------------------------------------------------------------------
+    el_u = basix.ufl.element(
+        "Lagrange",
+        fluid_domain.topology.cell_name(),
+        2,
+        shape=(fluid_domain.geometry.dim,),
+    )
+    el_p = basix.ufl.element("Lagrange", fluid_domain.topology.cell_name(), 1)
+    el_mixed = basix.ufl.mixed_element([el_u, el_p])
+    # Mixed function space W = [P2]^d × P1
+    W = dolfinx.fem.functionspace(fluid_domain, el_mixed)
+    u, p = ufl.TrialFunctions(W)
+    v, q = ufl.TestFunctions(W)
+    # Boundary measure and facet normal
+    ds = ufl.Measure("ds", domain=fluid_domain)
+    n = ufl.FacetNormal(fluid_domain)
+    # Velocity subspace (W0) and its collapsed scalar/vector space (V)
+    W0 = W.sub(0)
+    V, _ = W0.collapse()
+    # Mixed solution (u, p) as a nonlinear function
+    wh = dolfinx.fem.Function(W)
+    uh, ph = ufl.split(wh)
+
+    # -------------------------------------------------------------------------
+    # 3. Locate boundary facets for inlet, outlet and walls
+    # -------------------------------------------------------------------------
+    # Inlet: plane x = x_max_channel_left
+    def inlet_marker(x):
+        return np.isclose(x[0], x_max_channel_left)
+
+    inlet_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
+    )
+
+    # Outlet: plane x = x_min_channel_right
+    def outlet_marker(x):
+        return np.isclose(x[0], x_min_channel_right)
+
+    outlet_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, outlet_marker
+    )
+
+    # All other walls except the top (z = channel_height):
+    #   y = 0, y = channel_width, z = 0
+    def walls_rest(x):
+        return (
+            np.isclose(x[1], 0) | np.isclose(x[1], channel_width) | np.isclose(x[2], 0)
+        )
+
+    walls_rest_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, walls_rest
+    )
+
+    tol = 1e-8
+
+    # Top wall in the left rigid section: z = channel_height and x in (left section)
+    def wall_top_left_channel(x):
+        return np.logical_and.reduce(
+            (
+                np.isclose(x[2], channel_height, atol=tol),
+                x[0] > x_min_channel_left - tol,
+                x[0] <= x_max_channel_left + tol,
+            )
+        )
+
+    wall_top_left_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_top_left_channel
+    )
+
+    # Top wall in the right rigid section: z = channel_height and x in (right section)
+    def wall_top_right_channel(x):
+        return np.logical_and.reduce(
+            (
+                np.isclose(x[2], channel_height, atol=tol),
+                x[0] >= x_min_channel_right - tol,
+                x[0] < x_max_channel_right + tol,
+            )
+        )
+
+    wall_top_right_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_top_right_channel
+    )
+    # All exterior facets of the domain
+    all_boundary_facets = dolfinx.mesh.exterior_facet_indices(fluid_domain.topology)
+    # Top middle wall facets are the remaining facets on z = channel_height that
+    # are not part of inlet, outlet, lower/side walls, or top-left/right.
+    wall_top_middle_facet = np.setdiff1d(
+        all_boundary_facets,
+        np.unique(
+            np.concatenate(
+                (
+                    inlet_facet,
+                    outlet_facet,
+                    walls_rest_facet,
+                    wall_top_left_facet,
+                    wall_top_right_facet,
+                )
+            )
+        ),
+    )
+    # -------------------------------------------------------------------------
+    # 4. Create Dirichlet BCs for pressure (inlet/outlet) and velocity (walls)
+    # -------------------------------------------------------------------------
+
+    # Pressure: locate dofs on inlet and outlet facets in W.sub(1) (pressure space)
+    dofs_inlet = dolfinx.fem.locate_dofs_topological(
+        W.sub(1), fluid_domain.topology.dim - 1, inlet_facet
+    )
+    dofs_outlet = dolfinx.fem.locate_dofs_topological(
+        W.sub(1), fluid_domain.topology.dim - 1, outlet_facet
+    )
+
+    # Velocity: locate dofs on the rigid walls in (W0, V) pair
+    dofs_walls_rest = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, walls_rest_facet
+    )
+    dofs_wall_top_left = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, wall_top_left_facet
+    )
+    dofs_wall_top_right = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, wall_top_right_facet
+    )
+    dofs_wall_top_middle = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, wall_top_middle_facet
+    )
+
+    # Inlet pressure BC
+    p_inlet = dolfinx.fem.Constant(
+        fluid_domain, dolfinx.default_scalar_type(inlet_pressure)
+    )
+    bc_inlet = dolfinx.fem.dirichletbc(p_inlet, dofs_inlet, W.sub(1))
+
+    # Outlet pressure BC
+    p_outlet = dolfinx.fem.Constant(
+        fluid_domain, dolfinx.default_scalar_type(outlet_pressure)
+    )
+    bc_outlet = dolfinx.fem.dirichletbc(p_outlet, dofs_outlet, W.sub(1))
+
+    # No-slip velocity BC on all walls (including top sections)
+    u_wall = dolfinx.fem.Function(V)
+    u_wall.x.array[:] = 0
+
+    bc_walls_rest = dolfinx.fem.dirichletbc(u_wall, dofs_walls_rest, W0)
+    bc_wall_top_left = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_left, W0)
+    bc_wall_top_right = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_right, W0)
+    bc_wall_top_middle = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_middle, W0)
+
+    # Collect all boundary conditions
+    bcs = [
+        bc_inlet,
+        bc_outlet,
+        bc_walls_rest,
+        bc_wall_top_left,
+        bc_wall_top_right,
+        bc_wall_top_middle,
+    ]
+
+    # -------------------------------------------------------------------------
+    # 5. Define the weak form of the steady Navier–Stokes equations
+    # -------------------------------------------------------------------------
+
+    Re = dolfinx.fem.Constant(
+        fluid_domain, dolfinx.default_scalar_type(reynolds_number)
+    )
+
+    # --- Weak form of steady NS (do-nothing form for pressure BCs via +∫ p n·v ds) ---
+    F = ufl.inner(ufl.grad(uh) * uh, v) * ufl.dx  # Convective term
+    F += ((1 / Re) * ufl.inner(ufl.grad(uh), ufl.grad(v))) * ufl.dx  # Diffusion term
+    F -= ufl.inner(ph, ufl.div(v)) * ufl.dx  # Pressure gradient
+    F += ufl.dot(ph * n, v) * ds  # Weak imposition of Dirichlet conditions
+    F += ufl.inner(ufl.div(uh), q) * ufl.dx  # Continuity equation
+
+    # Create the nonlinear problem
+    problem = NonlinearProblem(F, wh, bcs)
+    # Create the Newton solver
+    newton_solver = NewtonSolver(MPI.COMM_WORLD, problem)
+    # Set the Newton solver parameters
+    newton_solver.convergence_criterion = "incremental"
+    newton_solver.rtol = 1e-6
+    # newton_solver.max_it = 100
+    newton_solver.report = False
+    # Modify the linear solver in each Newton iteration
+    ksp = newton_solver.krylov_solver
+    opts = PETSc.Options()
+    option_prefix = ksp.getOptionsPrefix()
+    opts[f"{option_prefix}ksp_type"] = "preonly"
+    opts[f"{option_prefix}pc_type"] = "lu"
+    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
+    ksp.setFromOptions()
+    # Solve the nonlinear problem
+    log.set_log_level(log.LogLevel.WARNING)
+    n, converged = newton_solver.solve(wh)
+    print(
+        f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}"
+    )
+
+    # -------------------------------------------------------------------------
+    # 7. Identify the top middle (elastic) wall and extract pressure data
+    # -------------------------------------------------------------------------
+    def wall_top_middle_channel(x):
+        """Logical mask for vertices on the top middle (elastic) wall."""
+        return np.logical_and.reduce(
+            (
+                np.isclose(x[2], channel_height, atol=tol),
+                x[0] >= x_min_channel_middle - tol,
+                x[0] <= x_max_channel_middle + tol,
+            )
+        )
+
+    # Vertices belonging to the top middle wall
+    verts = dolfinx.mesh.locate_entities(fluid_domain, 0, wall_top_middle_channel)
+    # Coordinates of those vertices
+    coords = fluid_domain.geometry.x[verts]
+
+    # Unique x and y coordinates on the top middle wall (rounded to avoid noise)
+    unique_x = np.unique(np.round(coords[:, 0], 10))
+    unique_y = np.unique(np.round(coords[:, 1], 10))
+
+    # -------------------------------------------------------------------------
+    # 8. Extract and sort pressure on the top middle face
+    # -------------------------------------------------------------------------
+    # Collapse the pressure subspace to obtain a scalar pressure field
+    pressure_field = wh.sub(1).collapse()
+    # Coordinates of pressure dofs
+    dof_coordinates = pressure_field.function_space.tabulate_dof_coordinates()
+    # Find pressure dofs that belong to the top middle wall facets
+    top_middle_wall_dofs = dolfinx.fem.locate_dofs_topological(
+        pressure_field.function_space,
+        fluid_domain.topology.dim - 1,
+        wall_top_middle_facet,
+    )
+    # Coordinates and pressure values at those dofs
+    top_middle_wall_coords = dof_coordinates[top_middle_wall_dofs]
+    top_middle_wall_p = pressure_field.x.array[top_middle_wall_dofs]
+    # Sort by x-coordinate (for now)
+    sorted_indices = np.argsort(top_middle_wall_coords[:, 0])
+    top_middle_wall_p_sorted = top_middle_wall_p[sorted_indices]
+
+    # Reorder pressures into a consistent x-sweep for each fixed y, to match
+    # the logical (n_x+1) × (n_y+1) grid on the top wall.
+    top_middle_wall_p_sorted_x = np.empty_like(top_middle_wall_p_sorted)
+
+    n_x = len(unique_x) - 1
+    n_y = len(unique_y) - 1
+    for j in range(n_y + 1):
+        top_middle_wall_p_sorted_x[j * (n_x + 1) : (j + 1) * (n_x + 1)] = (
+            top_middle_wall_p_sorted[(n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
+        )
+
+    # This pressure array is now suitable as a load distribution for a
+    # Kirchhoff–Love plate bending model of the elastic top wall.
+
+    return wh, top_middle_wall_p_sorted_x, channel_length_middle, unique_x, unique_y

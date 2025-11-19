@@ -1,4 +1,5 @@
 import dolfinx
+import numpy as np
 
 
 def visualize_mesh(mesh: dolfinx.mesh.Mesh, title: str = "Mesh Visualization"):
@@ -22,7 +23,12 @@ def visualize_mesh(mesh: dolfinx.mesh.Mesh, title: str = "Mesh Visualization"):
     grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
 
     plotter = pyvista.Plotter()
+    # Add origin marker and label
+    origin = np.array([[0.0, 0.0, 0.0]])
+    plotter.add_points(origin, color='red', point_size=15.0, render_points_as_spheres=True)
+    plotter.add_point_labels(origin, ["(0,0,0)"], font_size=12)
     plotter.add_mesh(grid, show_edges=True)
+    plotter.show_axes()
     plotter.view_xy()
     plotter.add_title(title, font_size=12)
     plotter.show()

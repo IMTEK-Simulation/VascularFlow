@@ -54,19 +54,22 @@ def flow_network_1d_pressure_boundary_condition(
     pressure = np.arange(nb_nodes, dtype=float)
 
     def channel_flow(pin: np.ndarray, pout: np.ndarray) -> np.ndarray:
-        #return resistance * (pin - pout)
-        return resistance * (pin - pout) ** 2
+        dp = pin - pout
+        #return resistance * (dp)
+        #return resistance * dp ** 2
+        return resistance * np.arctan(dp)
 
     def dq_dpin(pin: np.ndarray, pout: np.ndarray) -> np.ndarray:
-        # ∂Q/∂p_in = R
-        #return resistance * np.ones_like(pin)
-        return 2 * resistance * (pin - pout)
+        dp = pin - pout
+        #return resistance * np.ones_like(pin) # ∂Q/∂p_in = R
+        #return 2 * resistance * dp
+        return resistance / (1.0 + dp**2)
 
     def dq_dpout(pin: np.ndarray, pout: np.ndarray) -> np.ndarray:
-        # ∂Q/∂p_out = -R
-        #return -resistance * np.ones_like(pout)
-        return - 2 * resistance * (pin - pout)
-
+        dp = pin - pout
+        #return -resistance * np.ones_like(pout) # ∂Q/∂p_out = -R
+        #return - 2 * resistance * dp
+        return -resistance / (1.0 + dp**2)
     # --------------------------------------------------------------------------
     # Node flow residuals: must equal zero at interior nodes
     # --------------------------------------------------------------------------

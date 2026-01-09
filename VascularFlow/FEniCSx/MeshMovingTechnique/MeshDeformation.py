@@ -375,72 +375,97 @@ def mesh_deformation_3d_rigid_elastic_rigid_channel(
     # -------------------------------------------------------------------------
     # 2. Mark boundary facets of the channel
     # -------------------------------------------------------------------------
-    def inlet_marker(x):
-        return np.isclose(x[0], x_max_channel_left)
-
-    inlet_facet = locate_entities_boundary(
-        fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
-    )
-
-    def outlet_marker(x):
-        return np.isclose(x[0], x_min_channel_right)
-
-    outlet_facet = locate_entities_boundary(
-        fluid_domain, fluid_domain.topology.dim - 1, outlet_marker
-    )
-
     def walls_rest(x):
         return (
-            np.isclose(x[0], x_max_channel_left)
-            | np.isclose(x[0], x_min_channel_right)
-            | np.isclose(x[1], 0)
-            | np.isclose(x[1], channel_width)
-            | np.isclose(x[2], 0)
+                np.isclose(x[0], x_max_channel_left)
+                | np.isclose(x[0], x_min_channel_right)
+                | np.isclose(x[1], 0)
+                | np.isclose(x[1], channel_width)
+            # | np.isclose(x[2], 0)
         )
-
     walls_rest_facet = locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, walls_rest
     )
 
+    def wall_top(x):
+        return np.isclose(x[2], channel_height)
+    wall_top_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_top
+    )
+
+    def wall_bottom(x):
+        return np.isclose(x[2], 0)
+    wall_bottom_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_bottom
+    )
+
     tol = 1e-8
-
     def wall_top_left_channel(x):
-        return np.logical_and.reduce(
-            (
-                np.isclose(x[2], channel_height, atol=tol),
-                x[0] > x_min_channel_left - tol,
-                x[0] <= x_max_channel_left + tol,
-            )
-        )
-
+        return np.logical_and.reduce((
+            np.isclose(x[2], channel_height, atol=tol),
+            x[0] > x_min_channel_left - tol,
+            x[0] <= x_max_channel_left + tol
+        ))
     wall_top_left_facet = locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, wall_top_left_channel
     )
 
     def wall_top_right_channel(x):
-        return np.logical_and.reduce(
-            (
-                np.isclose(x[2], channel_height, atol=tol),
-                x[0] >= x_min_channel_right - tol,
-                x[0] < x_max_channel_right + tol,
-            )
-        )
-
+        return np.logical_and.reduce((
+            np.isclose(x[2], channel_height, atol=tol),
+            x[0] >= x_min_channel_right - tol,
+            x[0] < x_max_channel_right + tol
+        ))
     wall_top_right_facet = locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, wall_top_right_channel
     )
 
+    def wall_bottom_left_channel(x):
+        return np.logical_and.reduce((
+            np.isclose(x[2], 0, atol=tol),
+            x[0] > x_min_channel_left - tol,
+            x[0] <= x_max_channel_left + tol
+        ))
+    wall_bottom_left_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_bottom_left_channel
+    )
+
+    def wall_bottom_right_channel(x):
+        return np.logical_and.reduce((
+            np.isclose(x[2], 0, atol=tol),
+            x[0] >= x_min_channel_right - tol,
+            x[0] < x_max_channel_right + tol
+        ))
+    wall_bottom_right_facet = locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_bottom_right_channel
+    )
+
+
     all_boundary_facets = exterior_facet_indices(fluid_domain.topology)
+
     wall_top_middle_facet = np.setdiff1d(
         all_boundary_facets,
         np.unique(
             np.concatenate(
                 (
-                    inlet_facet,
-                    outlet_facet,
                     walls_rest_facet,
+                    wall_bottom_facet,
                     wall_top_left_facet,
                     wall_top_right_facet,
+                )
+            )
+        ),
+    )
+
+    wall_bottom_middle_facet = np.setdiff1d(
+        all_boundary_facets,
+        np.unique(
+            np.concatenate(
+                (
+                    walls_rest_facet,
+                    wall_top_facet,
+                    wall_bottom_left_facet,
+                    wall_bottom_right_facet
                 )
             )
         ),
@@ -466,22 +491,46 @@ def mesh_deformation_3d_rigid_elastic_rigid_channel(
         displacement_function_space, fdim, wall_top_middle_facet
     )
 
+    dofs_wall_bottom_left = locate_dofs_topological(
+        displacement_function_space, fdim, wall_bottom_left_facet
+    )
+
+    dofs_wall_bottom_right = locate_dofs_topological(
+        displacement_function_space, fdim, wall_bottom_right_facet
+    )
+
+    dofs_wall_bottom_middle = locate_dofs_topological(
+        displacement_function_space, fdim, wall_bottom_middle_facet
+    )
+
     # -------------------------------------------------------------------------
     # 4. Sort top middle wall DOFs to match interface_displacement ordering
     # -------------------------------------------------------------------------
     dof_coordinates = displacement_function_space.tabulate_dof_coordinates()
     dofs_wall_top_middle_coords = dof_coordinates[dofs_wall_top_middle]
+    dofs_wall_bottom_middle_coords = dof_coordinates[dofs_wall_bottom_middle]
 
-    ys = np.round(dofs_wall_top_middle_coords[:, 1], 12)
-    y_levels = np.unique(ys)[::-1]
-    sorted_indices = []
-    for y in y_levels:
-        idx = np.where(ys == y)[0]
-        idx_sorted = idx[np.argsort(-dofs_wall_top_middle_coords[idx, 0])]
-        sorted_indices.extend(idx_sorted)
+    ys_top = np.round(dofs_wall_top_middle_coords[:, 1], 12)
+    y_levels_top = np.unique(ys_top)[::-1]
+    sorted_indices_top = []
+    for y_top in y_levels_top:
+        idx_top = np.where(ys_top == y_top)[0]
+        idx_sorted_top = idx_top[np.argsort(-dofs_wall_top_middle_coords[idx_top, 0])]
+        sorted_indices_top.extend(idx_sorted_top)
 
-    sorted_indices = np.array(sorted_indices)
-    sorted_boundary_dofs_wall_top_middle = dofs_wall_top_middle[sorted_indices]
+    sorted_indices_top = np.array(sorted_indices_top)
+    sorted_boundary_dofs_wall_top_middle = dofs_wall_top_middle[sorted_indices_top]
+
+    ys_bottom = np.round(dofs_wall_bottom_middle_coords[:, 1], 12)
+    y_levels_bottom = np.unique(ys_bottom)[::-1]
+    sorted_indices_bottom = []
+    for y_bottom in y_levels_bottom:
+        idx_bottom = np.where(ys_bottom == y_bottom)[0]
+        idx_sorted_bottom = idx_bottom[np.argsort(-dofs_wall_top_middle_coords[idx_bottom, 0])]
+        sorted_indices_bottom.extend(idx_sorted_bottom)
+
+    sorted_indices_bottom = np.array(sorted_indices_bottom)
+    sorted_boundary_dofs_wall_bottom_middle = dofs_wall_bottom_middle[sorted_indices_bottom]
 
     # -------------------------------------------------------------------------
     # 5. Define Dirichlet boundary conditions for the Laplace problem
@@ -498,14 +547,32 @@ def mesh_deformation_3d_rigid_elastic_rigid_channel(
         default_scalar_type(0), dofs_wall_top_right, displacement_function_space
     )
 
-    wall_top_middle_bc_value = fem.Function(displacement_function_space)
-    for dof, value in zip(sorted_boundary_dofs_wall_top_middle, interface_displacement):
-        wall_top_middle_bc_value.x.array[dof] = value
-
-    bc_wall_top_middle = fem.dirichletbc(
-        wall_top_middle_bc_value, sorted_boundary_dofs_wall_top_middle
+    bc_wall_bottom_left = fem.dirichletbc(
+        default_scalar_type(0), dofs_wall_bottom_left, displacement_function_space
     )
-    bc = [bc_wall_top_middle, bc_rest, bc_wall_top_left, bc_wall_top_right]
+
+    bc_wall_bottom_right = fem.dirichletbc(
+        default_scalar_type(0), dofs_wall_bottom_right, displacement_function_space
+    )
+
+    wall_top_middle_bc_value = fem.Function(displacement_function_space)
+    for dof_top, value_top in zip(sorted_boundary_dofs_wall_top_middle, interface_displacement):
+        wall_top_middle_bc_value.x.array[dof_top] = value_top
+    bc_wall_top_middle = fem.dirichletbc(wall_top_middle_bc_value, sorted_boundary_dofs_wall_top_middle)
+
+    wall_bottom_middle_bc_value = fem.Function(displacement_function_space)
+    for dof_bottom, value_bottom in zip(sorted_boundary_dofs_wall_bottom_middle, -interface_displacement):
+        wall_bottom_middle_bc_value.x.array[dof_bottom] = value_bottom
+    bc_wall_bottom_middle = fem.dirichletbc(wall_bottom_middle_bc_value, sorted_boundary_dofs_wall_bottom_middle)
+
+    bc = [bc_wall_top_middle,
+          bc_wall_top_left,
+          bc_wall_top_right,
+          bc_wall_bottom_middle,
+          bc_wall_bottom_left,
+          bc_wall_bottom_right,
+          bc_rest,
+          ]
 
     # -------------------------------------------------------------------------
     # 6. Variational problem for harmonic extension: -Δu = 0 in Ω

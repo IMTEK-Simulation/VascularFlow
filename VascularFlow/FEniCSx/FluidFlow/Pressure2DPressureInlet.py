@@ -627,7 +627,6 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     # Inlet: plane x = x_max_channel_left
     def inlet_marker(x):
         return np.isclose(x[0], x_max_channel_left)
-
     inlet_facet = dolfinx.mesh.locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, inlet_marker
     )
@@ -635,65 +634,79 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     # Outlet: plane x = x_min_channel_right
     def outlet_marker(x):
         return np.isclose(x[0], x_min_channel_right)
-
     outlet_facet = dolfinx.mesh.locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, outlet_marker
     )
 
     # All other walls except the top (z = channel_height):
-    #   y = 0, y = channel_width, z = 0
-    def walls_rest(x):
+    #   y = 0, y = channel_width
+    def walls_sides(x):
         return (
-            np.isclose(x[1], 0) | np.isclose(x[1], channel_width) | np.isclose(x[2], 0)
+                np.isclose(x[1], 0)
+                | np.isclose(x[1], channel_width)
         )
-
-    walls_rest_facet = dolfinx.mesh.locate_entities_boundary(
-        fluid_domain, fluid_domain.topology.dim - 1, walls_rest
+    walls_sides_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, walls_sides
     )
 
     tol = 1e-8
-
     # Top wall in the left rigid section: z = channel_height and x in (left section)
     def wall_top_left_channel(x):
-        return np.logical_and.reduce(
-            (
-                np.isclose(x[2], channel_height, atol=tol),
-                x[0] > x_min_channel_left - tol,
-                x[0] <= x_max_channel_left + tol,
-            )
-        )
-
+        return np.logical_and.reduce((
+            np.isclose(x[2], channel_height, atol=tol),
+            x[0] > x_min_channel_left - tol,
+            x[0] <= x_max_channel_left + tol
+        ))
     wall_top_left_facet = dolfinx.mesh.locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, wall_top_left_channel
     )
 
-    # Top wall in the right rigid section: z = channel_height and x in (right section)
     def wall_top_right_channel(x):
-        return np.logical_and.reduce(
-            (
-                np.isclose(x[2], channel_height, atol=tol),
-                x[0] >= x_min_channel_right - tol,
-                x[0] < x_max_channel_right + tol,
-            )
-        )
-
+        return np.logical_and.reduce((
+            np.isclose(x[2], channel_height, atol=tol),
+            x[0] >= x_min_channel_right - tol,
+            x[0] < x_max_channel_right + tol
+        ))
     wall_top_right_facet = dolfinx.mesh.locate_entities_boundary(
         fluid_domain, fluid_domain.topology.dim - 1, wall_top_right_channel
     )
+
+    def wall_bottom_left_channel(x):
+        return np.logical_and.reduce((
+            np.isclose(x[2], 0, atol=tol),
+            x[0] > x_min_channel_left - tol,
+            x[0] <= x_max_channel_left + tol
+        ))
+    wall_bottom_left_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_bottom_left_channel
+    )
+
+    def wall_bottom_right_channel(x):
+        return np.logical_and.reduce((
+            np.isclose(x[2], 0, atol=tol),
+            x[0] >= x_min_channel_right - tol,
+            x[0] < x_max_channel_right + tol
+        ))
+    wall_bottom_right_facet = dolfinx.mesh.locate_entities_boundary(
+        fluid_domain, fluid_domain.topology.dim - 1, wall_bottom_right_channel
+    )
+
     # All exterior facets of the domain
     all_boundary_facets = dolfinx.mesh.exterior_facet_indices(fluid_domain.topology)
-    # Top middle wall facets are the remaining facets on z = channel_height that
+    # middle walls facets are the remaining facets on z = channel_height that
     # are not part of inlet, outlet, lower/side walls, or top-left/right.
-    wall_top_middle_facet = np.setdiff1d(
+    walls_middle_facet = np.setdiff1d(
         all_boundary_facets,
         np.unique(
             np.concatenate(
                 (
                     inlet_facet,
                     outlet_facet,
-                    walls_rest_facet,
+                    walls_sides_facet,
                     wall_top_left_facet,
                     wall_top_right_facet,
+                    wall_bottom_left_facet,
+                    wall_bottom_right_facet,
                 )
             )
         ),
@@ -711,18 +724,19 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     )
 
     # Velocity: locate dofs on the rigid walls in (W0, V) pair
-    dofs_walls_rest = dolfinx.fem.locate_dofs_topological(
-        (W0, V), fluid_domain.topology.dim - 1, walls_rest_facet
-    )
+    dofs_walls_sides = dolfinx.fem.locate_dofs_topological((W0, V), fluid_domain.topology.dim - 1, walls_sides_facet)
+
     dofs_wall_top_left = dolfinx.fem.locate_dofs_topological(
-        (W0, V), fluid_domain.topology.dim - 1, wall_top_left_facet
-    )
+        (W0, V), fluid_domain.topology.dim - 1, wall_top_left_facet)
     dofs_wall_top_right = dolfinx.fem.locate_dofs_topological(
-        (W0, V), fluid_domain.topology.dim - 1, wall_top_right_facet
-    )
-    dofs_wall_top_middle = dolfinx.fem.locate_dofs_topological(
-        (W0, V), fluid_domain.topology.dim - 1, wall_top_middle_facet
-    )
+        (W0, V), fluid_domain.topology.dim - 1, wall_top_right_facet)
+    dofs_wall_bottom_left = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, wall_bottom_left_facet)
+    dofs_wall_bottom_right = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, wall_bottom_right_facet)
+
+    dofs_walls_middle = dolfinx.fem.locate_dofs_topological(
+        (W0, V), fluid_domain.topology.dim - 1, walls_middle_facet)
 
     # Inlet pressure BC
     p_inlet = dolfinx.fem.Constant(
@@ -740,20 +754,23 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     u_wall = dolfinx.fem.Function(V)
     u_wall.x.array[:] = 0
 
-    bc_walls_rest = dolfinx.fem.dirichletbc(u_wall, dofs_walls_rest, W0)
+    bc_walls_sides = dolfinx.fem.dirichletbc(u_wall, dofs_walls_sides, W0)
     bc_wall_top_left = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_left, W0)
     bc_wall_top_right = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_right, W0)
-    bc_wall_top_middle = dolfinx.fem.dirichletbc(u_wall, dofs_wall_top_middle, W0)
+    bc_wall_bottom_left = dolfinx.fem.dirichletbc(u_wall, dofs_wall_bottom_left, W0)
+    bc_wall_bottom_right = dolfinx.fem.dirichletbc(u_wall, dofs_wall_bottom_right, W0)
+    bc_walls_middle = dolfinx.fem.dirichletbc(u_wall, dofs_walls_middle, W0)
 
     # Collect all boundary conditions
-    bcs = [
-        bc_inlet,
-        bc_outlet,
-        bc_walls_rest,
-        bc_wall_top_left,
-        bc_wall_top_right,
-        bc_wall_top_middle,
-    ]
+    bcs = [bc_inlet,
+           bc_outlet,
+           bc_walls_sides,
+           bc_wall_top_left,
+           bc_wall_top_right,
+           bc_wall_bottom_left,
+           bc_wall_bottom_right,
+           bc_walls_middle,
+           ]
 
     # -------------------------------------------------------------------------
     # 5. Define the weak form of the steady Navier–Stokes equations
@@ -824,28 +841,25 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     # Coordinates of pressure dofs
     dof_coordinates = pressure_field.function_space.tabulate_dof_coordinates()
     # Find pressure dofs that belong to the top middle wall facets
-    top_middle_wall_dofs = dolfinx.fem.locate_dofs_topological(
-        pressure_field.function_space,
-        fluid_domain.topology.dim - 1,
-        wall_top_middle_facet,
-    )
+    middle_walls_dofs = dolfinx.fem.locate_dofs_topological(
+        pressure_field.function_space, fluid_domain.topology.dim - 1, walls_middle_facet)
     # Coordinates and pressure values at those dofs
-    top_middle_wall_coords = dof_coordinates[top_middle_wall_dofs]
-    top_middle_wall_p = pressure_field.x.array[top_middle_wall_dofs]
+    middle_walls_coords = dof_coordinates[middle_walls_dofs]
+    middle_walls_p = pressure_field.x.array[middle_walls_dofs]
     # Sort by x-coordinate (for now)
-    sorted_indices = np.argsort(top_middle_wall_coords[:, 0])
-    top_middle_wall_p_sorted = top_middle_wall_p[sorted_indices]
+    sorted_indices = np.argsort(middle_walls_coords[:, 0])
+    middle_walls_p_sorted = middle_walls_p[sorted_indices]
+    new_middle_walls_p_sorted = middle_walls_p_sorted.reshape(-1, 2 * len(unique_y))[:, :len(unique_y)].ravel()
 
     # Reorder pressures into a consistent x-sweep for each fixed y, to match
     # the logical (n_x+1) × (n_y+1) grid on the top wall.
-    top_middle_wall_p_sorted_x = np.empty_like(top_middle_wall_p_sorted)
+    middle_walls_p_sorted_x = np.empty_like(new_middle_walls_p_sorted)
 
     n_x = len(unique_x) - 1
     n_y = len(unique_y) - 1
     for j in range(n_y + 1):
-        top_middle_wall_p_sorted_x[j * (n_x + 1) : (j + 1) * (n_x + 1)] = (
-            top_middle_wall_p_sorted[(n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
-        )
+        middle_walls_p_sorted_x[j * (n_x + 1):(j + 1) * (n_x + 1)] = new_middle_walls_p_sorted[
+            (n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
 
     # This pressure array is now suitable as a load distribution for a
     # Kirchhoff–Love plate bending model of the elastic top wall.
@@ -874,4 +888,4 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     # Note: with outward normal n, a positive Q_outlet corresponds to flow
     # leaving the domain through the outlet.
 
-    return wh, Q_outlet, top_middle_wall_p_sorted_x, channel_length_middle, unique_x, unique_y
+    return wh, Q_outlet, middle_walls_p_sorted_x, channel_length_middle, unique_x, unique_y

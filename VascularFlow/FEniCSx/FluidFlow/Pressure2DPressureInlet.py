@@ -468,7 +468,32 @@ def pressure_3d_pressure_inlet(
             interface_pressure[(n_x - np.arange(n_x + 1)) * (n_y + 1) + j]
         )
 
-    return wh, sorted_interface_pressure_x
+    # -------------------------------------------------------------------------
+    # Volumetric flow rate at outlet: Q_outlet = ∫_{Γ_out} u · n ds
+    # -------------------------------------------------------------------------
+
+    # We need a facet tag for the outlet to build a boundary measure restricted
+    # to Γ_out. We tag the outlet facets with ID = 1.
+    fdim = fluid_domain.topology.dim - 1
+
+    # tag outlet facets with ID = 1
+    outlet_values = np.full(len(outlet_facet), 1, dtype=np.int32)
+    outlet_tags = dolfinx.mesh.meshtags(fluid_domain, fdim,
+                                        outlet_facet, outlet_values)
+
+    ds_out = ufl.Measure("ds", domain=fluid_domain, subdomain_data=outlet_tags)
+
+    # Use the solved velocity uh
+    n_normal = ufl.FacetNormal(fluid_domain)
+    Q_form = dolfinx.fem.form(ufl.dot(uh, n_normal) * ds_out(1))
+
+    Q_local = dolfinx.fem.assemble_scalar(Q_form)
+    Q_outlet = fluid_domain.comm.allreduce(Q_local, op=MPI.SUM)
+
+    # Note: with outward normal n, a positive Q_outlet corresponds to flow
+    # leaving the domain through the outlet.
+
+    return wh, sorted_interface_pressure_x, Q_outlet
 
 
 # -----------------------------------------------------------------------------

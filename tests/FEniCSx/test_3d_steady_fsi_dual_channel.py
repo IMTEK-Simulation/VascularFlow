@@ -88,6 +88,8 @@ def test_3d_dimensional_steady_fsi_dual_channel(
         channel2_deformed_mesh,
         residual_values,
         iteration_indices,
+        converged_Q1,
+        converged_Q2,
     ) = three_dimensional_steady_fsi_dual_channel(
         fluid_domain_1_x_inlet_coordinate,
         fluid_domain_1_x_outlet_coordinate,

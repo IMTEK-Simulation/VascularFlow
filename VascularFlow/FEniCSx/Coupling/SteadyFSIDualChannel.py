@@ -476,11 +476,16 @@ def three_dimensional_steady_fsi_dual_channel(
     iteration = 0
     residual_values = []
     iteration_indices = []
+
+    # store final flow rate
+    Q_outlet1_converged = None
+    Q_outlet2_converged = None
+
     # --- Fixed-point / Gauss–Seidel style FSI loop ---
     while residual > residual_number and iteration < iteration_number:
         # 1) Solve fluid in channel 1 with given inlet pressure and Re.
         #    Returns the mixed solution and the pressure sampled/sorted on the top face.
-        mixed_function1, p1 = pressure_3d_pressure_inlet(
+        mixed_function1, p1, Q_outlet1 = pressure_3d_pressure_inlet(
             channel1_domain,
             fluid_domain_1_x_inlet_coordinate,
             fluid_domain_1_x_outlet_coordinate,
@@ -492,7 +497,7 @@ def three_dimensional_steady_fsi_dual_channel(
         )
 
         # 2) Solve fluid in channel 2.
-        mixed_function2, p2 = pressure_3d_pressure_inlet(
+        mixed_function2, p2, Q_outlet2 = pressure_3d_pressure_inlet(
             channel2_domain,
             fluid_domain_2_x_inlet_coordinate,
             fluid_domain_2_x_outlet_coordinate,
@@ -502,6 +507,9 @@ def three_dimensional_steady_fsi_dual_channel(
             reynolds_number_channel2,
             inlet_pressure_channel2,
         )
+
+        Q_outlet1_converged = Q_outlet1 # <-- capture the most recent one
+        Q_outlet2_converged = Q_outlet2 # <-- capture the most recent one
 
         # 3) Plate bending due to differential pressure (p1 on one side, p2 on the other).
         #    The plate solver returns the global vector with 3 DOFs per node: [w, θx, θy].
@@ -672,4 +680,6 @@ def three_dimensional_steady_fsi_dual_channel(
         channel2_domain,
         residual_values,
         iteration_indices,
+        Q_outlet1_converged,
+        Q_outlet2_converged,
     )

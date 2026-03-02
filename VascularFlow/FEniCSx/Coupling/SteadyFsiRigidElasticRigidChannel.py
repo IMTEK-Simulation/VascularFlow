@@ -318,6 +318,7 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
             channel_height,
             x_min_channel_left,
             x_max_channel_right,
+            top_elastic_wall=False,
         )
 
         # -------------------------------------------------------------

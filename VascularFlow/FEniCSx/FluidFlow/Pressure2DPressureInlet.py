@@ -552,6 +552,7 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
     inlet_pressure: float,
     outlet_pressure: float,
     reynolds_number: float,
+    navier_stokes: bool,
 ):
     """
     Solve steady 3D Navier–Stokes flow in a composite rigid–elastic–rigid channel
@@ -587,6 +588,9 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
         Prescribed pressure at the outlet boundary (x = x_min_channel_right).
     reynolds_number : float
         Reynolds number Re = (U L) / ν used to non-dimensionalize the equations.
+    navier_stokes : bool
+        If True (default), solves the full Navier–Stokes equations including the nonlinear
+        convective term. If False, solves the simplified Stokes equations without the convective term.
     Returns
     -------
     wh :
@@ -796,45 +800,82 @@ def pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
            bc_wall_bottom_right,
            bc_walls_middle,
            ]
+    if navier_stokes is True:
+        # -------------------------------------------------------------------------
+        # 5.1. Define the weak form of the steady Navier–Stokes equations
+        # -------------------------------------------------------------------------
+        Re = dolfinx.fem.Constant(
+            fluid_domain, dolfinx.default_scalar_type(reynolds_number)
+        )
+        # --- Weak form of steady NS (do-nothing form for pressure BCs via +∫ p n·v ds) ---
+        F = ufl.inner(ufl.grad(uh) * uh, v) * ufl.dx  # Convective term
+        F += ((1 / Re) * ufl.inner(ufl.grad(uh), ufl.grad(v))) * ufl.dx  # Diffusion term
+        F -= ufl.inner(ph, ufl.div(v)) * ufl.dx  # Pressure gradient
+        F += ufl.dot(ph * n_normal, v) * ds  # Weak imposition of Dirichlet conditions
+        F += ufl.inner(ufl.div(uh), q) * ufl.dx  # Continuity equation
+        # Create the nonlinear problem
+        problem = NonlinearProblem(F, wh, bcs)
+        # Create the Newton solver
+        newton_solver = NewtonSolver(MPI.COMM_WORLD, problem)
+        # Set the Newton solver parameters
+        newton_solver.convergence_criterion = "incremental"
+        newton_solver.rtol = 1e-6
+        # newton_solver.max_it = 100
+        newton_solver.report = False
+        # Modify the linear solver in each Newton iteration
+        ksp = newton_solver.krylov_solver
+        opts = PETSc.Options()
+        option_prefix = ksp.getOptionsPrefix()
+        opts[f"{option_prefix}ksp_type"] = "preonly"
+        opts[f"{option_prefix}pc_type"] = "lu"
+        opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
+        ksp.setFromOptions()
+        # Solve the nonlinear problem
+        log.set_log_level(log.LogLevel.WARNING)
+        n, converged = newton_solver.solve(wh)
+        print(
+            f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}"
+        )
+    else:
+        # -------------------------------------------------------------------------
+        # 5.2. Define the weak form of the steady Stokes equations
+        # -------------------------------------------------------------------------
+        # Defining the source term and reynolds number over the fluid domain
+        f = dolfinx.fem.Constant(fluid_domain, dolfinx.default_scalar_type((0, 0, 0)))
+        # Variational form
+        F = ufl.inner(ufl.grad(u), ufl.grad(v)) * ufl.dx  # Diffusion term
+        F -= ufl.dot(ufl.grad(u) * n_normal, v) * ds
+        F -= ufl.inner(p, ufl.div(v)) * ufl.dx  # Pressure gradient
+        F += ufl.dot(p * n_normal, v) * ds
+        F += ufl.inner(ufl.div(u), q) * ufl.dx  # Continuity equation
+        F -= ufl.inner(f, v) * ufl.dx  # Source term
+        a, L = ufl.system(F)
+        # Compile the bi-linear and linear forms for assembly
+        a_compiled = dolfinx.fem.form(a)
+        L_compiled = dolfinx.fem.form(L)
+        # Create the global system matrix A and right-hand side vector b
+        A = dolfinx.fem.create_matrix(a_compiled)
+        b = dolfinx.fem.create_vector(L_compiled)
+        # Convert the DOLFINx PETSc matrix to a SciPy sparse matrix (for direct solve)
+        A_scipy = A.to_scipy()
+        # Assemble the global matrix A with boundary conditions
+        dolfinx.fem.assemble_matrix(A, a_compiled, bcs)
+        # Assemble the global right-hand side vector b
+        dolfinx.fem.assemble_vector(b.array, L_compiled)
+        # Apply boundary condition contributions (lifting) to the RHS vector
+        dolfinx.fem.apply_lifting(b.array, [a_compiled], [bcs])
+        # Finalize assembly of b (synchronize parallel data)
+        b.scatter_reverse(dolfinx.la.InsertMode.add)
+        # Apply Dirichlet boundary values directly to the RHS
+        [bc.set(b.array) for bc in bcs]
+        # Factorize the system matrix using a sparse LU solver (SciPy)
+        A_inv = scipy.sparse.linalg.splu(A_scipy)
+        # Create the solution function and solve the linear system
+        #wh = dolfinx.fem.Function(W)
+        wh.x.array[:] = A_inv.solve(b.array)
+        wh.x.scatter_forward()
+        uh, ph = ufl.split(wh)
 
-    # -------------------------------------------------------------------------
-    # 5. Define the weak form of the steady Navier–Stokes equations
-    # -------------------------------------------------------------------------
-
-    Re = dolfinx.fem.Constant(
-        fluid_domain, dolfinx.default_scalar_type(reynolds_number)
-    )
-
-    # --- Weak form of steady NS (do-nothing form for pressure BCs via +∫ p n·v ds) ---
-    F = ufl.inner(ufl.grad(uh) * uh, v) * ufl.dx  # Convective term
-    F += ((1 / Re) * ufl.inner(ufl.grad(uh), ufl.grad(v))) * ufl.dx  # Diffusion term
-    F -= ufl.inner(ph, ufl.div(v)) * ufl.dx  # Pressure gradient
-    F += ufl.dot(ph * n_normal, v) * ds  # Weak imposition of Dirichlet conditions
-    F += ufl.inner(ufl.div(uh), q) * ufl.dx  # Continuity equation
-
-    # Create the nonlinear problem
-    problem = NonlinearProblem(F, wh, bcs)
-    # Create the Newton solver
-    newton_solver = NewtonSolver(MPI.COMM_WORLD, problem)
-    # Set the Newton solver parameters
-    newton_solver.convergence_criterion = "incremental"
-    newton_solver.rtol = 1e-6
-    # newton_solver.max_it = 100
-    newton_solver.report = False
-    # Modify the linear solver in each Newton iteration
-    ksp = newton_solver.krylov_solver
-    opts = PETSc.Options()
-    option_prefix = ksp.getOptionsPrefix()
-    opts[f"{option_prefix}ksp_type"] = "preonly"
-    opts[f"{option_prefix}pc_type"] = "lu"
-    opts[f"{option_prefix}pc_factor_mat_solver_type"] = "mumps"
-    ksp.setFromOptions()
-    # Solve the nonlinear problem
-    log.set_log_level(log.LogLevel.WARNING)
-    n, converged = newton_solver.solve(wh)
-    print(
-        f"Newton solver for The Navier-Stokes equations completed in {n} iterations. Converged: {converged}"
-    )
 
     # -------------------------------------------------------------------------
     # 7. Identify the top middle (elastic) wall and extract pressure data

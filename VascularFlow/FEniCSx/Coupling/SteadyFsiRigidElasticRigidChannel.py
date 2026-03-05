@@ -247,6 +247,7 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
             inlet_pressure,
             outlet_pressure,
             reynolds_number,
+            navier_stokes=False,
         )
 
         Q_outlet_converged = Q_outlet  # <-- capture the most recent one

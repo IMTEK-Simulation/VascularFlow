@@ -75,6 +75,7 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
     plate_poisson_ratio: float,
     initial_channel_height: float,
     fluid_density: float,
+    fluid_dynamic_viscosity: float,
     fluid_velocity: float,
     bc_positions,
     bc_values,
@@ -123,6 +124,8 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
         Reference channel height used in the plate model.
     fluid_density : float
         Fluid density used in the plate loading term (if needed by the plate model).
+    fluid_dynamic_viscosity : float
+        Fluid dynamic viscosity used in the plate loading term (if needed by the plate model).
     fluid_velocity : float
         Reference fluid velocity used in the plate loading term (if needed).
     bc_positions :
@@ -273,6 +276,7 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
             plate_poisson_ratio,
             initial_channel_height,
             fluid_density,
+            fluid_dynamic_viscosity,
             fluid_velocity,
             bc_positions,
             bc_values,
@@ -319,7 +323,7 @@ def three_dimensional_steady_fsi_single_rigid_elastic_rigid_channel(
             channel_height,
             x_min_channel_left,
             x_max_channel_right,
-            top_elastic_wall=False,
+            top_elastic_wall=True,
         )
 
         # -------------------------------------------------------------

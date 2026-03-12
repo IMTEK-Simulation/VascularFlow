@@ -47,6 +47,7 @@ def plate_bending_acm_2d(
     plate_poisson_ratio: float,
     initial_channel_height: float,
     fluid_density: float,
+    fluid_dynamic_viscosity: float,
     fluid_velocity: float,
     bc_positions,
     bc_values,
@@ -76,6 +77,8 @@ def plate_bending_acm_2d(
         Reference height H0 used in the non-dimensionalization (appears in D).
     fluid_density : float
         Fluid density ρ used in the non-dimensionalization (appears in D).
+    fluid_dynamic_viscosity : float
+        Fluid dynamic viscosity used in the non-dimensionalization (appears in D)
     fluid_velocity : float
         Fluid velocity U used in the non-dimensionalization (appears in D).
     bc_positions : list[str] or tuple[str, ...]
@@ -105,12 +108,20 @@ def plate_bending_acm_2d(
     #    so that final linear system is dimensionless. If you switch to fully
     #    dimensional K (with constitutive coupling), set D=1 and put material in K.
     # -------------------------------------------------------------------------
-    D = (plate_thickness ** 3 * plate_young_modulus) / (
-            12
-            * (1 - plate_poisson_ratio ** 2)
-            * initial_channel_height ** 3
-            * fluid_density
-            * fluid_velocity ** 2
+    #D = (plate_thickness ** 3 * plate_young_modulus) / (
+    #        12
+    #        * (1 - plate_poisson_ratio ** 2)
+    #        * initial_channel_height ** 3
+    #        * fluid_density
+    #        * fluid_velocity ** 2
+    #)
+
+    D =  (plate_thickness ** 3 * plate_young_modulus) / (
+        12
+        * (1 - plate_poisson_ratio ** 2)
+        * initial_channel_height ** 2
+        * fluid_dynamic_viscosity
+        * fluid_velocity
     )
 
     # Use 3x3 tensor-product Gauss rule (9 points) for the element integrals.

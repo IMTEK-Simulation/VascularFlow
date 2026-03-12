@@ -38,20 +38,21 @@ def test_3d_steady_fsi_single_rigid_elastic_rigid_channel(
     # -------------------------
     # Mesh & geometry settings
     # -------------------------
-    n_x_fluid_domain = 15
+    n_x_fluid_domain = 20
     n_y_fluid_domain = 5
     n_z_fluid_domain = 5
     # -------------------------
     # Plate & fluid properties
     # -------------------------
-    reynolds_number = 6
+    reynolds_number = 15e-3
     plate_shape_function = ACMShapeFunctions()
-    plate_thickness = 20e-6
-    plate_young_modulus = 3e5
-    plate_poisson_ratio = 0
-    initial_channel_height = 20e-06
+    plate_thickness = 0.2e-3
+    plate_young_modulus = 1.6e6
+    plate_poisson_ratio = 0.499
+    initial_channel_height = 0.244e-03
     fluid_density = 1000
-    fluid_velocity = 0.3
+    fluid_dynamic_viscosity = 1e-03
+    fluid_velocity = 0.8
     bc_positions = ["bottom", "right", "top", "left"]
     bc_values = [0, 0, 0, 0]
     # -------------------------
@@ -91,6 +92,7 @@ def test_3d_steady_fsi_single_rigid_elastic_rigid_channel(
         plate_poisson_ratio,
         initial_channel_height,
         fluid_density,
+        fluid_dynamic_viscosity,
         fluid_velocity,
         bc_positions,
         bc_values,
@@ -101,7 +103,7 @@ def test_3d_steady_fsi_single_rigid_elastic_rigid_channel(
     )
     print('Q = ', converged_Q)
     print('max displacement = ', max(converged_middle_top_wall_displacement))
-    visualize_mesh(deformed_mesh, title="Deformed Mesh from Interface Displacement")
+    #visualize_mesh(deformed_mesh, title="Deformed Mesh from Interface Displacement")
 
     # --- Plotting ---
     if plot_results:

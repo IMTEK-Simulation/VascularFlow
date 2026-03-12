@@ -192,7 +192,7 @@ def test_pressure_3d_pressure_inlet_rigid_elastic_rigid_channel():
 
 
 
-    mixed_function,p, l, nx, ny = pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
+    mixed_function, Q, p, l, nx, ny = pressure_3d_pressure_inlet_rigid_elastic_rigid_channel(
         fluid_domain,
         channel_length,
         channel_width,
@@ -202,6 +202,7 @@ def test_pressure_3d_pressure_inlet_rigid_elastic_rigid_channel():
         inlet_pressure,
         outlet_pressure,
         reynolds_number,
+        navier_stokes=False,
     )
 
     visualize_mixed(mixed_function, fluid_domain)

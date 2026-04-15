@@ -17,10 +17,10 @@ def test_hexagonal_network_geometry() -> None:
 
     # Generate network nodes and connectivity
     outer_radius = 1.0
-    num_rows = 3
-    num_cols = 5
+    num_rows = 6
+    num_cols = 7
     nodes, connectivity_ci = flat_top_hexagonal_microfluidic_network(
-        outer_radius, num_rows, num_cols
+        outer_radius, num_rows, num_cols, center=True,
     )
 
     print("Connectivity (inlet → outlet):")

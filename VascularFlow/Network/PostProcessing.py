@@ -2,6 +2,23 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 
+# ============================================================
+# Global plotting style
+# ============================================================
+
+plt.rcParams.update({
+    "font.size": 12,
+    "axes.labelsize": 13,
+    "axes.titlesize": 13,
+    "legend.fontsize": 10,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "lines.linewidth": 2.2,
+    "figure.dpi": 150,
+    "savefig.dpi": 600,
+    "savefig.bbox": "tight",
+})
+
 
 def plot_flow_network(
     flow_channels,
@@ -27,19 +44,27 @@ def plot_flow_network(
         ym = 0.5 * (y1 + y2)
 
         # show Q
-        ax.text(
-            xm, ym,
-            f"{flow_channels[c]:.2f}",
-            fontsize=6,
-            color="black",
-            ha="center",
-            va="center"
-        )
+        #ax.text(
+        #    xm, ym,
+        #    f"{flow_channels[c]:.2f}",
+        #    fontsize=6,
+        #    color="black",
+        #    ha="center",
+        #    va="center"
+        #)
 
     # labels
-    ax.set_title("Flow Distribution")
+    #ax.set_title("Flow Distribution")
     ax.set_aspect("equal")
-    ax.grid(True, linestyle="--", alpha=0.4)
+    #ax.grid(True, linestyle="--", alpha=0.4)
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+
+    plt.savefig("flow_network.png")
 
     plt.show()
 
@@ -223,28 +248,28 @@ def plot_velocity_pressure_network(
     # ---------------- Simulation plots ----------------
     plt.plot(
         different_inlet_pressure, CI_sim,
-        marker='^', linewidth=2.5, markersize=7,
-        color='green', label='Central Inlet (CI) - Simulation'
+        marker='^', markersize=7,
+        color='green', label='CI - Simulation'
     )
 
     plt.plot(
         different_inlet_pressure, SO1_sim,
-        marker='s', linewidth=2.5, markersize=6,
+        marker='s', markersize=6,
         linestyle='--', color='black',
-        label=r'Side Outlet 1 (SO$_1$) - Simulation'
+        label=r'SO$_1$ - Simulation'
     )
 
     plt.plot(
         different_inlet_pressure, SO2_sim,
-        marker='D', linewidth=2.5, markersize=6,
+        marker='D', markersize=6,
         linestyle='--', color='blue',
-        label=r'Side Outlet 2 (SO$_2$) - Simulation'
+        label=r'SO$_2$ - Simulation'
     )
 
     plt.plot(
         different_inlet_pressure, CO_sim,
-        marker='o', linewidth=2.5, markersize=7,
-        color='orange', label='Central Outlet (CO) - Simulation'
+        marker='o', markersize=7,
+        color='orange', label='CO - Simulation'
     )
 
     # ---------------- Experimental plots ----------------
@@ -261,39 +286,40 @@ def plot_velocity_pressure_network(
 
         plt.scatter(
             different_inlet_pressure, CI_exp,
-            marker='^', s=70,
+            marker='^', s=65,
             facecolors='none', edgecolors='green',
-            linewidths=1.8, label='Central Inlet (CI) - Experimental'
+            linewidths=1.8, label='CI - Experimental'
         )
 
         plt.scatter(
             different_inlet_pressure, SO1_exp,
-            marker='s', s=60,
+            marker='s', s=65,
             facecolors='none', edgecolors='black',
-            linewidths=1.8, label=r'Side Outlet 1 (SO$_1$) - Experimental'
+            linewidths=1.8, label=r'SO$_1$ - Experimental'
         )
 
         plt.scatter(
             different_inlet_pressure, SO2_exp,
-            marker='D', s=60,
+            marker='D', s=55,
             facecolors='none', edgecolors='blue',
-            linewidths=1.8, label=r'Side Outlet 2 (SO$_2$) - Experimental'
+            linewidths=1.8, label=r'SO$_2$ - Experimental'
         )
 
         plt.scatter(
             different_inlet_pressure, CO_exp,
-            marker='o', s=70,
+            marker='o', s=55,
             facecolors='none', edgecolors='orange',
-            linewidths=1.8, label='Central Outlet (CO) - Experimental'
+            linewidths=1.8, label='CO - Experimental'
         )
 
-    plt.title("Simulation vs Experimental")
-    plt.xlabel(r'$\Delta p$ (mbar)')
-    plt.ylabel(r'Velocity $u$ (m/s)')
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.tick_params(direction='in', length=5)
-    plt.legend(loc='upper left', frameon=True, fontsize=9)
+    #plt.title("Simulation vs Experimental")
+    plt.xlabel(r'$\Delta P_{\mathrm{in}}$ (mbar)')
+    plt.ylabel(r'Outlet velocity $u$ (m/s)')
+    plt.grid(True, linestyle='--', linewidth=0.5, alpha=0.6)
+    plt.tick_params(direction='in', length=5, width=1, top=True, right=True)
+    plt.legend(loc='upper left', frameon=True, ncol=2)
     plt.tight_layout()
+    plt.savefig("network_validation.pdf")
     plt.show()
 
 def plot_esr_outlet_flow_rate_ratio(

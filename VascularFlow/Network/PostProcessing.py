@@ -284,6 +284,28 @@ def plot_velocity_pressure_network(
         SO1_exp = exp_data[experimental_case]["SO1"]
         SO2_exp = exp_data[experimental_case]["SO2"]
 
+        CI_err = np.abs(CI_sim - CI_exp)
+        CO_err = np.abs(CO_sim - CO_exp)
+        SO1_err = np.abs(SO1_sim - SO1_exp)
+        SO2_err = np.abs(SO2_sim - SO2_exp)
+
+        CI_err = np.abs(CI_sim - CI_exp)
+        CO_err = np.abs(CO_sim - CO_exp)
+        SO1_err = np.abs(SO1_sim - SO1_exp)
+        SO2_err = np.abs(SO2_sim - SO2_exp)
+
+        plt.errorbar(different_inlet_pressure, CI_exp, yerr=CI_err,
+                     fmt='none', ecolor='green', elinewidth=1.3, capsize=4)
+
+        plt.errorbar(different_inlet_pressure, SO1_exp, yerr=SO1_err,
+                     fmt='none', ecolor='black', elinewidth=1.3, capsize=4)
+
+        plt.errorbar(different_inlet_pressure, SO2_exp, yerr=SO2_err,
+                     fmt='none', ecolor='blue', elinewidth=1.3, capsize=4)
+
+        plt.errorbar(different_inlet_pressure, CO_exp, yerr=CO_err,
+                     fmt='none', ecolor='orange', elinewidth=1.3, capsize=4)
+
         plt.scatter(
             different_inlet_pressure, CI_exp,
             marker='^', s=65,
